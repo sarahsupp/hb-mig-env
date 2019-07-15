@@ -1,5 +1,5 @@
 # Code for eBird migration project
-# modified from previous code developed for Supp et al. 2015 Ecography manuscript
+# modified from previous code developed for Supp et al. 2015 Ecography manuscript (hb-migration.r)
 # developed by S. Supp and L. Graham for new analysis combining eBird data with remotely sensed environment
 # Migration estimates for 5 North American hummingbird species, 2008-2018, for each year separately
 #     * Population-level centroids for geographic location on each day
@@ -9,26 +9,44 @@
 #     * Error across all years combined
 #     * Cross Track Progression (CTP; sensu La Sorte and Fink 2017)
 #     * Cross Track Separation (CTS; sensu La Sorte and Fink 2017)
+# DISCLAIMER: Code is under development
+# 15 July 2019
+
+# Inputs: eBird datasets for 5 species 2008-2018
+#         eBird effort dataset (number of eBird checklists submitted per day per year)
+
+# Outputs: table summarizing the migration estimates for each species in each year
+#          figure showing centroids for each species in each year
 
 
 # Import libraries
+library(tidyverse)
 library(ggmap)
-library(maptools)
-library(fields)
-library(sp)
-library(raster)
+library(geosphere)
 library(maps)
-library(mapdata)
-library(rgdal)
-library(raster)
-library(gamm4)
+library(dggridR)
+library(SDMTools)
+library(mgcv)
 
-#set working directory
-main = "C:/Users/sarah/Dropbox/ActiveResearchProjects/Hummingbird_eBirdMigration"
-figpath = "C:/Users/sarah/Dropbox/ActiveResearchProjects/Hummingbird_eBirdMigration/Figures"
-gitpath = "C:/Users/sarah/Documents/GitHub/hb-migration"
-wd = "C:/Users/sarah/Dropbox/ActiveResearchProjects/Hummingbird_eBirdMigration/data"
-setwd(wd)
+# library(sf)
+# library(gamm4)
+# 
+# library(maptools)
+# library(fields)
+# library(sp)
+# library(raster)
+# 
+# library(mapdata)
+# library(rgdal)
+# library(raster)
+# library(gamm4)
+
+#set working directory -- won't need anymore because using RProjects!
+# main = "C:/Users/sarah/Dropbox/ActiveResearchProjects/Hummingbird_eBirdMigration"
+# figpath = "C:/Users/sarah/Dropbox/ActiveResearchProjects/Hummingbird_eBirdMigration/Figures"
+# gitpath = "C:/Users/sarah/Documents/GitHub/hb-migration"
+# wd = "C:/Users/sarah/Dropbox/ActiveResearchProjects/Hummingbird_eBirdMigration/data"
+# setwd(wd)
 
 
 #---------------------------------------------------------------------------------------
@@ -36,44 +54,255 @@ setwd(wd)
 #---------------------------------------------------------------------------------------
 
 # read in summary of effort data (Number of eBird checklists submitted per day per year)
-effort = read.table("FAL_hummingbird_data/checklist_12_2004-2013wh_grp.txt", header=TRUE, as.is=TRUE)
+effort = read.table("data/checklist_12_2004-2013wh_grp.txt", header=TRUE, as.is=TRUE)
+# read in species data
+hbird = read.delim("data/cahu.txt", sep=",")
 
-# read in country outline shp files
-USAborder = readShapePoly("borders/USA_adm/USA_adm0.shp")
-Mexborder = readShapePoly("borders/MEX_adm/MEX_adm0.shp")
-Canborder = readShapePoly("borders/CAN_adm/CAN_adm0.shp")
+#------------------------------------- CLEAN UP SPECIES DATA
 
-# read in the altitude layers, make rasters
-elev = raster("alt_5m_bil/alt.bil")
+hbird$MONTH = factor(hbird$MONTH, levels=c(1:12), ordered=TRUE) #set to factor instead of integer
 
-# plot elev + map for extent
-myext <- c(-175, -50, 15, 75)
-plot.new()
-#plot(elev, ext = myext, xlab="Longitude", ylab = "Latitude", xlim = c(-175,-50), ylim = c(15,75), col=gray(0:256/256))
+#FIXME: Make sure there is only 1 representative from a given GROUP_ID so we aren't overcounting
 
-borders <- function(){
-  plot(USAborder, ext=myext, border="black", add=TRUE)
-  plot(Mexborder, ext=myext, border="black", add=TRUE)
-  plot(Canborder, ext=myext, border="black", add=TRUE)
+#grab species name for setting directory paths and naming figures
+species = hbird$SCI_NAME[1] 
+species = gsub(" ","", species, fixed=TRUE)
+
+# Count and plot how many records there are in each year, save to figures and data folders
+count_by_year = data.frame(table(hbird$YEAR))
+names(count_by_year) = c('year', 'count')
+write.table(count_by_year, file = paste0("data/count_by_year_", species, ".txt"), row.names=FALSE)
+
+ggplot(data = count_by_year, aes(year, count)) + geom_bar(fill="cadetblue2", stat="identity") + theme_bw() + 
+  ggtitle(species) + theme(text = element_text(size=20)) + xlab("time") + ylab("number checklists") + 
+  theme(axis.text.x=element_text(angle = -60, hjust = 0))
+ggsave(file = paste0("figures/count_by_year_", species, ".pdf"))
+
+# vector of the years contained in the analysis
+years = c(2008:2018)
+
+#------------------------------------- SET THE GRID
+
+# create a global grid with equal area icosahedron cells 
+# FIXME: In Supp et al., we used grids from Sahr et al at area=12,452 km2. dggridR provides 7,774 or 23,322 km2 as resolutions. Which to use? As small as we can get away with?
+dgg <- dgconstruct(res=8)
+
+#Get the corresponding grid cells and center coordinates for all observations in the dataset (lat-long pair)
+hbird$cell <- dgGEO_to_SEQNUM(dgg, hbird$LONGITUDE, hbird$LATITUDE)$seqnum
+hbird$cell_lat <- dgSEQNUM_to_GEO(dgg, hbird$cell)$lat_deg #FIXME: pretty sure this is accurate, check
+hbird$cell_lon <-dgSEQNUM_to_GEO(dgg, hbird$cell)$lon_deg #FIXME: pretty sure this is accurate, check
+
+#Converting SEQNUM to GEO gives the center coordinates of the cells
+cellcenters   <- dgSEQNUM_to_GEO(dgg, hbird$cell)
+
+#Get and plot the number of observations in each cell
+hbirdcounts <- hbird %>%
+  group_by(cell) %>% 
+  summarise(count=n())
+
+ggplot(hbirdcounts, aes(x=count)) + geom_histogram(binwidth=10)
+
+#Get the grid cell boundaries for cells which had bird observations
+grid <- dgcellstogrid(dgg, hbirdcounts$cell, frame=TRUE, wrapcells=TRUE)
+
+#Update the grid cells' properties to include the number of observations in each cell
+grid <- merge(grid, hbirdcounts, by.x="cell", by.y="cell")
+
+#Get polygons for each north america (currently just USA) and make a map of bird observations
+countries <- map_data("usa")
+
+ggplot() + 
+  geom_polygon(data=countries, aes(x=long, y=lat, group=group), fill=NA, color="black")   +
+  geom_polygon(data=grid,      aes(x=long, y=lat, group=group, fill=count), alpha=0.4)    +
+  geom_path   (data=grid,      aes(x=long, y=lat, group=group), alpha=0.4, color="white") +
+#  geom_point  (aes(x=cellcenters$lon_deg, y=cellcenters$lat_deg), size=0.5) +
+  scale_fill_gradient(low="blue", high="red")
+
+# FIXME: Plot a similar map, but of the total eBird effort by the same grid size?
+
+#------------------------------------- ESTIMATE DAILY POPULATION CENTROID LOCATIONS
+
+# FIXME: Make this extensible to select and iterate through 1 year at a time for centroid estimation
+
+hbird_oneyear <- hbird %>%
+  filter(YEAR == years[y])
+
+effort_oneyear <- effort %>%
+  filter(YEAR == years[y]) 
+
+# Get daily mean location, weighted by total eBirder effort
+
+# calculate the number of days per year
+num_days_in_year <- yday(paste0(years[y], "-12-31"))
+julian = seq(1:num_days_in_year)
+
+# aggregate daily info by mean centroid location
+daily_hex_counts <- hbird_oneyear %>%
+  group_by(DAY, cell, cell_lon, cell_lat) %>%
+  summarise(obs_count = n())
+
+# merge the daily hex counts with the effort data
+daily_counts <- merge(daily_hex_counts, effort_one_year, by.x = c("cell", "DAY"), by.y = c("POLYFID", "DAY")) #FIXME: This won't work with the example data so I can't test it
+
+# calculate weighted mean longitude and latitude (based on number of observatons per hex and total effort per hex)
+weighted_mean_locs <- daily_counts %>%
+  group_by(DAY) %>%
+  summarise(month = months(DAY), #FIXME: needs to calculate the numeric month from the julian day number
+            numcells = n(), 
+            numobs = sum(obs_count),
+            wtmean_lon = wt.mean(cell_lon, obs_count/effort_count), #FIXME: jdata$COUNT refers to the total number of eBird observations submitted in a cell on a given day, fix here, and suggest to rename effort_count for clarity
+            wtmean_lat = wt.mean(cell_lat, obs_count/effort_count), #FIXME: As above...
+            wtsd_lon <- wt.sd(cell_lon, obs_count/effort_count),
+            wtsd_lon <- wt.sd(cell_lat, obs_count/effort_count))
+
+# use GAM model to predict daily location along a smoothing line
+# choice of k and gamm in the GAM function are the same as in FAL 2013 and Supp 2015
+
+# find the best fit line for the lon and lat data separately
+lon_gam <- gam(wtmean_lon ~ s(DAY, k=20), data = weighted_mean_locs, gamma = 1.5) # TODO: consider upping gamma? and changing basis? (adaptive spline or penalized spline?)
+lat_gam <- gam(wtmean_lat ~ s(DAY, k=20), data = weighted_mean_locs, gamma = 1.5) # TODO: consider upping gamma? and changing basis? (adaptive spline or penalized spline?)
+
+# predict values along a smoothing line
+xpred = data.frame(DAY = sort(unique(weighted_mean_locs$DAY)))
+lon_pred <- predict(lon_gam, newdata = xpred, type = "response", se.fit = TRUE)
+lat_pred <- predict(lat_gam, newdata = xpred, type = "response", se.fit = TRUE)
+
+#bring the predicted data back together
+daily_centroids <- data.frame(spname = species, DAY = xpred$DAY, month = weighted_mean_locs$month,
+                              lon = lon_pred$fit, lat = lat_pred$fit, lon_se = lonpred$se.fit, lat_se = latpred$se.fit)
+
+
+#------------------------------------- ESTIMATE MIGRATION TIMING USING SEGMENTATION ANALYSIS
+
+# use GAM approach to estimate rough starting points for segmentation from the mean loc latitude data
+# input the predicted centroids (weighted_mean_locs or daily_centroids??) for migration path
+# estimates the day beginning spring migration, end autumn migration, and maximum latitude (breeding)
+# weighted_mean_locs (meanlocs) was used in Supp 2015... Why did I not use the smoothed predicted route (daily_centroids)?
+
+# GAM model on predicted latitude of centroids by julian day
+gam1 <- gam(wtmean_lat ~ s(DAY, k=40), data = weighted_mean_locs, gamma = 1.5) # FIXME: Why did I use k=40 here and k=20 above? Is the switch a problem?
+xpred <- data.frame(DAY = c(1:max(weighted_mean_locs$DAY))) # FIXME: is there a reason I can't use xpred as calculated from above? Would there maybe be gaps?
+dpred <- predict(gam1, newdata = xpred, type = "response", se.fit = TRUE)
+
+## cutoff based on 2 SE for spring and autumn combined, following La Sorte et al. 2013 methods
+# Spring migration should be between 11 Jan and 9 July, roughly (index)
+# Autumn migration should be between 8 August and 21 Dec, roughly (index)
+spring_threshold <- min(dpred$se.fit[c(1:120)]*2.56 + dpred$fit[c(1:120)])
+autumn_threshold <- min(dpred$se.fit[c(280:365)]*2.56 + dpred$fit[c(280:365)])
+spring_index <- 11:190
+autumn_index <- 220:355
+spring_max <- spring_index[which.max(dpred$fit[spring_index])]
+autumn_max <- fall_index[which.max(dpred$fit[autumn_index])]
+
+# identify beginning of SPRING migration
+tst = 1000
+spring_index2 <- spring_max
+while(tst > spring_threshold){
+  tst <- dpred$fit[spring_index2]
+  if(spring_index2 == 1) break
+  spring_index2 <- spring_index2 - 1
 }
+spring_begin <- spring_index2 + 1
 
-plot(elev, ext=myext, addfun=borders, ylab="Latitude", xlab="Longitude", xlim = c(-175,-50), ylim = c(15,75), col=gray(0:256/256)) 
+# identify end of AUTUMN migration
+tst <- 1000
+autumn_index2 <- autumn_max
+while(tst > fall_threshold){
+  tst <- dpred$fit[autumn_index2]
+  if(autumn_index2==365) break
+  autumn_index2 <- autumn_index2 + 1
+}
+autumn_end <- fall_index2 - 1
+
+# identify MAXIMUM LATITUDE (division point)
+max_lat <- xpred$DAY[which.max(dpred$fit[xpred$DAY])]
+
+# Store migration date estimates together in a new vector
+migration_dates = c(spring_begin, max_lat, autumn_end) # FIXME: What was the round() function for in the original code? Do I need it here?
+
+# Create and save a map of species migration route mapped onto continent, trimmed to migration dates (start to end)
+#FIXME: Was previously done using BasePlotMigration() function
+
+
+#------------------------------------- ESTIMATE DAILY MIGRATION DISTANCES AND SPEEDS TRAVELED (POPULATION-LEVEL)
+
+# calculate Great Circle distances traveled each day between predicted daily locations
+# previously used geodist function from spaa package
+# FIXME: We could use R. Hijman's new package geosphere for an accurate update
+#        This package can calculate Haversine (great circle) distance, or VicentyEllipsoid distance, which should be more accurate
+
+daily_travel <- weighted_mean_locs %>%
+  arrange(DAY) %>%
+  mutate(distance = distVicentyEllipsoid(c(wtmean_lon, wtmean_lat))) %>% # FIXME: I think if I leave it at this, and if weighted mean locs is ordered, it should calculated sequential distances? Will need to test... 
+  filter(DAY >= migration_dates$spring_begin & migration_dates <= migration_dates$autumn_end)
+
+ggplot(daily_travel, aes(DAY, distance)) + geom_line(size=1, col = "#4daf4a") + 
+  theme_bw() + xlab("Julian Day") + ylab("Distance Traveled (km)") + 
+  ggtitle(paste(species, year, sep = " ")) + theme(text = element_text(size=20)) +  
+  geom_vline(xintercept = median(migr_dates), col = "indianred", linetype = "dashed")
+
+
+#estimate daily migration speed for spring and autumn, separately
+# takes the top 5 fastest migration speeds for each time period, and assigns the median as the migration speed
+# FIXME: Any reason to limit it to 5? What was our original rationale here?
+
+# FIXME: I don't think the below code will quite work in dplyr, will need some editing... 
+# FIXME: Could also do in one dplyr statement if I create a column labeled each as spring or autumn, and use group_by
+spring_speed <- daily_travel %>%
+  filter(DAY >= migration_dates$spring_begin & DAY <= migration_dates$max_lat) %>%
+  arrange(distance, desc()) %>%
+  median(slice(1:5)) 
+
+autumn_speed <- daily_travel %>%
+  filter(DAY >= migration_dates$max_lat & DAY <= migration_dates$autumn_end) %>%
+  arrange(distance, desc()) %>%
+  median(slice(1:5)) 
+
+
+
+
+
+
+#------------------------------------------------ OLD CODE FOR REFERENCE, DELETE LATER
+
+#------
+
+# # read in country outline shp files
+# USAborder = readShapePoly("borders/USA_adm/USA_adm0.shp")
+# Mexborder = readShapePoly("borders/MEX_adm/MEX_adm0.shp")
+# Canborder = readShapePoly("borders/CAN_adm/CAN_adm0.shp")
+
+# # read in the altitude layers, make rasters
+# elev = raster("alt_5m_bil/alt.bil")
+
+# # plot elev + map for extent
+# myext <- c(-175, -50, 15, 75)
+# plot.new()
+# #plot(elev, ext = myext, xlab="Longitude", ylab = "Latitude", xlim = c(-175,-50), ylim = c(15,75), col=gray(0:256/256))
+# 
+# borders <- function(){
+#   plot(USAborder, ext=myext, border="black", add=TRUE)
+#   plot(Mexborder, ext=myext, border="black", add=TRUE)
+#   plot(Canborder, ext=myext, border="black", add=TRUE)
+# }
+# 
+# plot(elev, ext=myext, addfun=borders, ylab="Latitude", xlab="Longitude", xlim = c(-175,-50), ylim = c(15,75), col=gray(0:256/256)) 
 
 # read in the north america equal area hex grid map (FAL) and format for use
 # other options include a quad map (terr_4h6/nw_vector_grid.shp) or a hexmap with land only (terr_4h6/terr_4h6.shp", sep="")
-hexgrid = readShapePoly(paste(main, "/data/icosahedron_land_and_sea/icosahedron.shp", sep="")) #hex with land and sea, cropped to North America
+# hexgrid = readShapePoly(paste(main, "/data/icosahedron_land_and_sea/icosahedron.shp", sep="")) #hex with land and sea, cropped to North America
 
-# plot the hexgrid on a map of north america
-plot(NA, NA, xlim=c(-175, -50), ylim=c(15, 75), xlab = "Longitude", ylab = "Latitude")
-map('worldHires', c("usa", "canada", "mexico"), add=TRUE, fill=T, col="lightblue")
-plot(hexgrid, add=T)
+# # plot the hexgrid on a map of north america
+# plot(NA, NA, xlim=c(-175, -50), ylim=c(15, 75), xlab = "Longitude", ylab = "Latitude")
+# map('worldHires', c("usa", "canada", "mexico"), add=TRUE, fill=T, col="lightblue")
+# plot(hexgrid, add=T)
 
 # make a North America base map
-noam = get_map(location = "North America", zoom=3, maptype = "terrain", color = "bw")
+# noam = get_map(location = "North America", zoom=3, maptype = "terrain", color = "bw")
 
-# map total birder effort 2004:2013
-eft = PlotChecklistMap(effort, hexgrid, wd)
-rm(eft)
+# # map total birder effort 2004:2013
+# eft = PlotChecklistMap(effort, hexgrid, wd)
+# rm(eft)
 
 # read in eBird data
 files = list.files(pattern = "*.txt")
@@ -92,68 +321,68 @@ for (f in 1:length(files)){
   require(segmented)
   source(paste(gitpath, "/migration-fxns.r", sep=""))
   
-  humdat = read.table(files[f], header=TRUE, sep=",", quote="", fill=TRUE, as.is=TRUE, comment.char="")
-  
-  names(humdat) = c("SCI_NAME", "PRIMARY_COM_NAME","YEAR", "DAY", "TIME", "GROUP_ID", "PROTOCOL_ID",
-                    "PROJ_ID", "DURATION_HRS", "EFFORT_DISTANCE_KM", "EFFORT_AREA_HA", "NUM_OBSERVERS",
-                    "LATITUDE", "LONGITUDE", "SUB_ID", "POLYFID", "MONTH")
-  
-  humdat$MONTH = factor(humdat$MONTH, levels=c(1:12), ordered=TRUE)
-  
-  #grab species name for setting directory paths and naming figures
-  species = humdat$SCI_NAME[1] 
-  species = gsub(" ","", species, fixed=TRUE)
-  species = gsub("\"", "", species, fixed=TRUE)
-  
-  # set years of data to use - data after 2007 is more reliable
-  years = c(2004:2013)
+  # humdat = read.table(files[f], header=TRUE, sep=",", quote="", fill=TRUE, as.is=TRUE, comment.char="")
+  # 
+  # names(humdat) = c("SCI_NAME", "PRIMARY_COM_NAME","YEAR", "DAY", "TIME", "GROUP_ID", "PROTOCOL_ID",
+  #                   "PROJ_ID", "DURATION_HRS", "EFFORT_DISTANCE_KM", "EFFORT_AREA_HA", "NUM_OBSERVERS",
+  #                   "LATITUDE", "LONGITUDE", "SUB_ID", "POLYFID", "MONTH")
+  # 
+  # humdat$MONTH = factor(humdat$MONTH, levels=c(1:12), ordered=TRUE)
+  # 
+  # #grab species name for setting directory paths and naming figures
+  # species = humdat$SCI_NAME[1] 
+  # species = gsub(" ","", species, fixed=TRUE)
+  # species = gsub("\"", "", species, fixed=TRUE)
+  # 
+  # # set years of data to use - data after 2007 is more reliable
+  # years = c(2004:2013)
 
-  #start a new directory
-  dirpath = paste(figpath, "/", species, sep="")
-     #dir.create(dirpath, showWarnings = TRUE, recursive = FALSE) #only need if directory did not previously exist
-  
-  #show how many records there are for the species across the years, write to txt file
-  #yeartable = PlotRecords(humdat$YEAR, species)
-  #ggsave(file=paste(dirpath, "/", "years", species, ".pdf", sep=""))
-  
-  write.table(yeartable, file = paste(dirpath, "/", species,".txt",sep=""), row.names=FALSE)
-  
+  # #start a new directory
+  # dirpath = paste(figpath, "/", species, sep="")
+  #    #dir.create(dirpath, showWarnings = TRUE, recursive = FALSE) #only need if directory did not previously exist
+  # 
+  # #show how many records there are for the species across the years, write to txt file
+  # #yeartable = PlotRecords(humdat$YEAR, species)
+  # #ggsave(file=paste(dirpath, "/", "years", species, ".pdf", sep=""))
+  # 
+  # write.table(yeartable, file = paste(dirpath, "/", species,".txt",sep=""), row.names=FALSE)
+  # 
   #save a figure of the geographic number of checklists for the species, over all the years
   #count = PlotChecklistMap(humdat, hexgrid, dirpath)
-  
-  for (y in 1:length(years)){
-    yrdat = humdat[which(humdat$YEAR == years[y]),]
-    yreffort = effort[which(effort$YEAR == years[y]),]
-    
-    #plot frequency of sightings per month
-    #monthtable = PlotRecords(yrdat$month, species)
-    
-    #get daily weighted mean location 
-    meanlocs = AlternateMeanLocs(yrdat, species, hexgrid, yreffort)
-    
-    #use GAM model to predict daily location along a smoothing line
-    preds = EstimateDailyLocs(meanlocs)
-    
-    #use gam approach to estimate rough starting points for segmentation from the mean loc latitude data
-    startpoints = round(Est3MigrationDates(meanlocs))
-    migration = startpoints
-    
-    #save a plot of the species migration route mapped onto continent with real observations
-    pdf(file = paste(dirpath, "/trimmed-route_", species, years[y], ".pdf", sep=""), width = 7, height = 4.5)
-    BasePlotMigration(preds, yrdat, migration, elev, USAborder, Mexborder, Canborder, myext)
-    dev.off() 
-    
-    #save a plot of the species migration mapped onto an elevation raster
-    pdf(file = paste(dirpath, "/elev-route_", species, years[y], ".pdf", sep=""), width = 7, height = 4.5)
-    ElevPlotMigration(preds, yrdat, migration, elev, USAborder, Mexborder, Canborder, myext)
-    dev.off() 
-    
-    #get Great Circle distances traveled each day between predicted daily locations
-    dist = DailyTravel(preds, 4, 5, species, years[y], migration)
-    
-    #estimate migration speed for spring and fall
-    speed = MigrationSpeed(dist, migration)
-    
+  # 
+  # for (y in 1:length(years)){
+  #   yrdat = humdat[which(humdat$YEAR == years[y]),]
+  #   yreffort = effort[which(effort$YEAR == years[y]),]
+  #   
+  #   #plot frequency of sightings per month
+  #   #monthtable = PlotRecords(yrdat$month, species)
+  #   
+  #   #get daily weighted mean location 
+  #   meanlocs = AlternateMeanLocs(yrdat, species, hexgrid, yreffort)
+  #   
+  #   #use GAM model to predict daily location along a smoothing line
+  #   preds = EstimateDailyLocs(meanlocs)
+  #   
+  #   #use gam approach to estimate rough starting points for segmentation from the mean loc latitude data
+  #   startpoints = round(Est3MigrationDates(meanlocs))
+  #   migration = startpoints
+  #   
+  #   #save a plot of the species migration route mapped onto continent with real observations
+  #   pdf(file = paste(dirpath, "/trimmed-route_", species, years[y], ".pdf", sep=""), width = 7, height = 4.5)
+  #   BasePlotMigration(preds, yrdat, migration, elev, USAborder, Mexborder, Canborder, myext)
+  #   dev.off() 
+  # #   
+  #   #save a plot of the species migration mapped onto an elevation raster
+  #   pdf(file = paste(dirpath, "/elev-route_", species, years[y], ".pdf", sep=""), width = 7, height = 4.5)
+  #   ElevPlotMigration(preds, yrdat, migration, elev, USAborder, Mexborder, Canborder, myext)
+  #   dev.off() 
+  #   
+    # #get Great Circle distances traveled each day between predicted daily locations
+    # dist = DailyTravel(preds, 4, 5, species, years[y], migration)
+    # 
+    # #estimate migration speed for spring and fall
+    # speed = MigrationSpeed(dist, migration)
+    # 
     #plot smoothed migration trajectory for the species and year
     #mig_path = PlotMigrationPath(preds, noam, species, years[y])
     #ggsave(mig_path, file=paste(dirpath, "/", "migration", species, years[y], ".pdf", sep=""))
