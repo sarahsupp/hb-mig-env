@@ -1,6 +1,17 @@
-#Code for eBird migration project
-# (c) 2013 -2014 Sarah Supp 
+# Code for eBird migration project
+# modified from previous code developed for Supp et al. 2015 Ecography manuscript
+# developed by S. Supp and L. Graham for new analysis combining eBird data with remotely sensed environment
+# Migration estimates for 5 North American hummingbird species, 2008-2018, for each year separately
+#     * Population-level centroids for geographic location on each day
+#     * Migration start and end dates
+#     * Peak latitude (breeding)
+#     * Population migration speed
+#     * Error across all years combined
+#     * Cross Track Progression (CTP; sensu La Sorte and Fink 2017)
+#     * Cross Track Separation (CTS; sensu La Sorte and Fink 2017)
 
+
+# Import libraries
 library(ggmap)
 library(maptools)
 library(fields)
