@@ -21,8 +21,23 @@ library(tidyverse)
 dat <- auk_ebd("data/ebd_calhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
-  auk_filter(file = "data/calhum.txt") %>%
-  read_ebd()
+  auk_filter(file = "data/calhum.txt", overwrite=TRUE) %>%
+  read_ebd() %>%
+  select(common_name, scientific_name, latitude, longitude, observation_date,
+         time_observations_started, observer_id, protocol_type, project_code,
+         duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
+         sampling_event_identifier, group_identifier) %>%
+  mutate(sampling_event_identifier = 
+           ifelse(!is.na(group_identifier), group_identifier, sampling_event_identifier)) %>% #TODO: Check, but seems to accomplish what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID
+  group_by(common_name, observation_date, sampling_event_identifier) %>%
+  mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
+         latdiff = latitude-latitude2, londiff = longitude-longitude2) #TODO: no differences observed... is this because groups had total agreement (realistic)? or because I've done something wrong. 
+# FIXME: Also, I should have some rows with the same groupID but that doesn't seem to be the case? Because I used mutate, some duplicates should be present, will need to remove duplicate group_identifiers, now that the means have been calculated
+
+#FAL code for dealing with group_identifier
+# eBirdData$SUB_ID <- ifelse(!is.na(eBirdData$GROUP_ID), eBirdData$GROUP_ID, eBirdData$SUB_ID)
+# eBirdData <- aggregate(cbind(LATITUDE, LONGITUDE) ~ PRIMARY_COM_NAME + YEAR + DAY + SUB_ID, data=eBirdData, FUN=mean, na.rm=TRUE)
+
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -35,7 +50,11 @@ dat <- auk_ebd("data/ebd_brthum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/brthum.txt") %>%
-  read_ebd()
+  read_ebd() %>%
+  select(common_name, scientific_name, latitude, longitude, observation_date,
+         time_observations_started, observer_id, protocol_type, project_code,
+         duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
+         sampling_event_identifier, group_identifier)
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -48,8 +67,20 @@ ggplot(day_summary, aes(x = observation_date, y = count)) +
 dat <- auk_ebd("data/ebd_rufhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
-  auk_filter(file = "data/rufhum.txt") %>%
-  read_ebd()
+  auk_filter(file = "data/rufhum.txt", overwrite=TRUE) %>%
+  read_ebd() %>%
+  select(common_name, scientific_name, latitude, longitude, observation_date,
+         time_observations_started, observer_id, protocol_type, project_code,
+         duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
+         sampling_event_identifier, group_identifier) %>%
+mutate(sampling_event_identifier = 
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% #TODO: Check that this accomplishes what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID #FIXME: I don't think this is actually working, because it says all items are unique, which shouldn't be true
+  group_by(common_name, observation_date, sampling_event_identifier) %>%
+  mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
+         latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
+  distinct(sampling_event_identifier, .keep_all = TRUE)
+#TODO: no differences observed... is this because groups had total agreement (realistic)? or because I've done something wrong. Also, I should have some rows with the same groupID but that doesn't seem to be the case?
+
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -62,7 +93,11 @@ dat <- auk_ebd("data/ebd_bkchum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/bkchum.txt") %>%
-  read_ebd()
+  read_ebd() %>%
+  select(common_name, scientific_name, latitude, longitude, observation_date,
+         time_observations_started, observer_id, protocol_type, project_code,
+         duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
+         sampling_event_identifier, group_identifier)
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -76,7 +111,11 @@ dat <- auk_ebd("data/ebd_rthhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/rthhum.txt") %>%
-  read_ebd()
+  read_ebd() %>%
+  select(common_name, scientific_name, latitude, longitude, observation_date,
+         time_observations_started, observer_id, protocol_type, project_code,
+         duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
+         sampling_event_identifier, group_identifier)
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())

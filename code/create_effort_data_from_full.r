@@ -7,7 +7,8 @@
 # Inputs: Full eBird dataset for all species 2006-2018
 
 # Outputs: Effort dataset with columns for DAY, YEAR, CELL, COUNT, assuming a dggridR resolution 
-#          of 8 (7774.20 km2) or 7 (23322.62 km2). 
+#          of 6 (12452 km2) for the Fuller4H projection (not the default in ddgridR)
+
 
 # Import libraries
 library(tidyverse)
@@ -17,7 +18,7 @@ library(maps)
 library(dggridR)
 
 # read in full eBird data to be converted into effort data
-effort = #FIXME, need effort file
+effort = #FIXME, need full eBird to begin with
 
 # FAL suggests using Fuller grid with resolution=6 (12452 km2)
 hex_6 <- dgconstruct(projection = "FULLER", aperture = 4, topology = "HEXAGON", res=6)
