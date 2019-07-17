@@ -55,8 +55,16 @@ library(mgcv)
 
 # read in summary of effort data (Number of eBird checklists submitted per day per year)
 effort = read.table("data/checklist_12_2004-2013wh_grp.txt", header=TRUE, as.is=TRUE)
-# read in species data
-hbird = read.delim("data/cahu.txt", sep=",")
+# read in species data 
+# hbird_ex = read.delim("data/cahu.txt", sep=",") # OLD DATA I WAS USING AS AN EXAMPLE
+hbird = read_tsv("data/ebd_calhum_200601_201812_relFeb-2019/ebd_calhum_200601_201812_relFeb-2019.txt")
+#TODO: Keep only 1 record from each group identifier
+#TODO: Keep only columns for SCIENTIFIC NAME, COMMON NAME, LATITUDE, LONGITUDE, 
+#      OBSERVATION DATE (change to Year and Julian Day of Year columns), TIME OBSERVATIONS STARTED,
+#      OBSERVER ID, PROTOCOL TYPE, PROJECT CODE, DURATION MINUTES (previously was hours), 
+#      EFFORT DISTANCE KM, EFFORT AREA HA, NUMBER OBSERVERS
+# TODO: Would this kind of clean up be better to do in a separate script, 
+#       then import the cleaned files directly here? Seems better...?
 
 #------------------------------------- CLEAN UP SPECIES DATA
 
