@@ -54,17 +54,12 @@ library(mgcv)
 #---------------------------------------------------------------------------------------
 
 # read in summary of effort data (Number of eBird checklists submitted per day per year)
-effort = read.table("data/checklist_12_2004-2013wh_grp.txt", header=TRUE, as.is=TRUE)
+effort = read.table("data/checklist_12_2004-2013wh_grp.txt", header=TRUE, as.is=TRUE) #FIXME: This is just a placeholder file for now
+
 # read in species data 
 # hbird_ex = read.delim("data/cahu.txt", sep=",") # OLD DATA I WAS USING AS AN EXAMPLE
-hbird = read_tsv("data/ebd_calhum_200601_201812_relFeb-2019/ebd_calhum_200601_201812_relFeb-2019.txt")
+hbird = read_tsv("data/calhum.txt")
 #TODO: Keep only 1 record from each group identifier
-#TODO: Keep only columns for SCIENTIFIC NAME, COMMON NAME, LATITUDE, LONGITUDE, 
-#      OBSERVATION DATE (change to Year and Julian Day of Year columns), TIME OBSERVATIONS STARTED,
-#      OBSERVER ID, PROTOCOL TYPE, PROJECT CODE, DURATION MINUTES (previously was hours), 
-#      EFFORT DISTANCE KM, EFFORT AREA HA, NUMBER OBSERVERS
-# TODO: Would this kind of clean up be better to do in a separate script, 
-#       then import the cleaned files directly here? Seems better...?
 
 #------------------------------------- CLEAN UP SPECIES DATA
 
@@ -93,6 +88,7 @@ years = c(2008:2018)
 
 # create a global grid with equal area icosahedron cells 
 # FIXME: In Supp et al., we used grids from Sahr et al at area=12,452 km2. dggridR provides 7,774 or 23,322 km2 as resolutions. Which to use? As small as we can get away with?
+#        Use Fuller4H projection with res=6 (same resolution as other FAL papers)
 dgg <- dgconstruct(res=8)
 
 #Get the corresponding grid cells and center coordinates for all observations in the dataset (lat-long pair)

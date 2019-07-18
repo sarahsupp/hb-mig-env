@@ -37,7 +37,7 @@ dat <- auk_ebd("data/ebd_calhum_200601_201812_relFeb-2019.txt") %>%
   mutate(year = year(observation_date),
          month = month(observation_date),
            day = yday(observation_date)) #TODO: Are times in eBird relative to the location, or converted already into UTC?
-
+write_csv(dat, path = "data/calhum.csv")
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -60,7 +60,11 @@ dat <- auk_ebd("data/ebd_brthum_200601_201812_relFeb-2019.txt") %>%
   group_by(common_name, observation_date, sampling_event_identifier) %>%
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
          latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
-  distinct(sampling_event_identifier, .keep_all = TRUE)
+  distinct(sampling_event_identifier, .keep_all = TRUE) %>%
+  mutate(year = year(observation_date),
+         month = month(observation_date),
+         day = yday(observation_date))
+write_csv(dat, path = "data/brthum.csv")
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -84,14 +88,18 @@ mutate(sampling_event_identifier =
   group_by(common_name, observation_date, sampling_event_identifier) %>%
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
          latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
-  distinct(sampling_event_identifier, .keep_all = TRUE)
-
+  distinct(sampling_event_identifier, .keep_all = TRUE) %>%
+  mutate(year = year(observation_date),
+         month = month(observation_date),
+         day = yday(observation_date))
+write_csv(dat, path = "data/rufhum.csv")
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
 
 ggplot(day_summary, aes(x = observation_date, y = count)) +
   geom_line() + ggtitle("Rufous Hummingbird")
+
 
 # BLACK CHINNED HUMMINGBIRD
 dat <- auk_ebd("data/ebd_bkchum_200601_201812_relFeb-2019.txt") %>%
@@ -108,7 +116,11 @@ dat <- auk_ebd("data/ebd_bkchum_200601_201812_relFeb-2019.txt") %>%
   group_by(common_name, observation_date, sampling_event_identifier) %>%
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
          latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
-  distinct(sampling_event_identifier, .keep_all = TRUE)
+  distinct(sampling_event_identifier, .keep_all = TRUE) %>%
+  mutate(year = year(observation_date),
+         month = month(observation_date),
+         day = yday(observation_date))
+write_csv(dat, path = "data/bkchum.csv")
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -132,11 +144,11 @@ dat <- auk_ebd("data/ebd_rthhum_200601_201812_relFeb-2019.txt") %>%
   group_by(common_name, observation_date, sampling_event_identifier) %>%
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
          latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
-  distinct(sampling_event_identifier, .keep_all = TRUE) %>%
-  mutate(year = ,
-         month = 
-           day = 
-           time = )
+  distinct(sampling_event_identifier, .keep_all = TRUE)  %>%
+  mutate(year = year(observation_date),
+         month = month(observation_date),
+         day = yday(observation_date))
+write_csv(dat, path = "data/rthhum.csv")
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
