@@ -16,6 +16,7 @@
 
 library(auk)
 library(tidyverse)
+library(lubridate)
 
 # CALLIOPE HUMMINGBIRD
 dat <- auk_ebd("data/ebd_calhum_200601_201812_relFeb-2019.txt") %>%
@@ -27,16 +28,15 @@ dat <- auk_ebd("data/ebd_calhum_200601_201812_relFeb-2019.txt") %>%
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
          sampling_event_identifier, group_identifier) %>%
-  mutate(sampling_event_identifier = 
-           ifelse(!is.na(group_identifier), group_identifier, sampling_event_identifier)) %>% #TODO: Check, but seems to accomplish what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID
+  mutate(sampling_event_identifier = #TODO: Group records may already be aggregated, if so, we don't need this step!
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% #TODO: Check that this accomplishes what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID #FIXME: I tested this on a smaller version of the dataframe and it seems to work fine. Is there a data issue?
   group_by(common_name, observation_date, sampling_event_identifier) %>%
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
-         latdiff = latitude-latitude2, londiff = longitude-longitude2) #TODO: no differences observed... is this because groups had total agreement (realistic)? or because I've done something wrong. 
-# FIXME: Also, I should have some rows with the same groupID but that doesn't seem to be the case? Because I used mutate, some duplicates should be present, will need to remove duplicate group_identifiers, now that the means have been calculated
-
-#FAL code for dealing with group_identifier
-# eBirdData$SUB_ID <- ifelse(!is.na(eBirdData$GROUP_ID), eBirdData$GROUP_ID, eBirdData$SUB_ID)
-# eBirdData <- aggregate(cbind(LATITUDE, LONGITUDE) ~ PRIMARY_COM_NAME + YEAR + DAY + SUB_ID, data=eBirdData, FUN=mean, na.rm=TRUE)
+         latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
+  distinct(sampling_event_identifier, .keep_all = TRUE) %>%
+  mutate(year = year(observation_date),
+         month = month(observation_date),
+           day = yday(observation_date)) #TODO: Are times in eBird relative to the location, or converted already into UTC?
 
 
 day_summary <- dat %>% group_by(observation_date) %>%
@@ -54,7 +54,13 @@ dat <- auk_ebd("data/ebd_brthum_200601_201812_relFeb-2019.txt") %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
-         sampling_event_identifier, group_identifier)
+         sampling_event_identifier, group_identifier) %>%
+  mutate(sampling_event_identifier = 
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% 
+  group_by(common_name, observation_date, sampling_event_identifier) %>%
+  mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
+         latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
+  distinct(sampling_event_identifier, .keep_all = TRUE)
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -74,12 +80,11 @@ dat <- auk_ebd("data/ebd_rufhum_200601_201812_relFeb-2019.txt") %>%
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
          sampling_event_identifier, group_identifier) %>%
 mutate(sampling_event_identifier = 
-           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% #TODO: Check that this accomplishes what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID #FIXME: I don't think this is actually working, because it says all items are unique, which shouldn't be true
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% #TODO: Check that this accomplishes what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID #FIXME: I tested this on a smaller version of the dataframe and it seems to work fine. Is there a data issue?
   group_by(common_name, observation_date, sampling_event_identifier) %>%
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
          latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
   distinct(sampling_event_identifier, .keep_all = TRUE)
-#TODO: no differences observed... is this because groups had total agreement (realistic)? or because I've done something wrong. Also, I should have some rows with the same groupID but that doesn't seem to be the case?
 
 
 day_summary <- dat %>% group_by(observation_date) %>%
@@ -97,7 +102,13 @@ dat <- auk_ebd("data/ebd_bkchum_200601_201812_relFeb-2019.txt") %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
-         sampling_event_identifier, group_identifier)
+         sampling_event_identifier, group_identifier) %>%
+  mutate(sampling_event_identifier = 
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% 
+  group_by(common_name, observation_date, sampling_event_identifier) %>%
+  mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
+         latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
+  distinct(sampling_event_identifier, .keep_all = TRUE)
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -115,7 +126,17 @@ dat <- auk_ebd("data/ebd_rthhum_200601_201812_relFeb-2019.txt") %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
-         sampling_event_identifier, group_identifier)
+         sampling_event_identifier, group_identifier) %>%
+  mutate(sampling_event_identifier = 
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% 
+  group_by(common_name, observation_date, sampling_event_identifier) %>%
+  mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
+         latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
+  distinct(sampling_event_identifier, .keep_all = TRUE) %>%
+  mutate(year = ,
+         month = 
+           day = 
+           time = )
 
 day_summary <- dat %>% group_by(observation_date) %>%
   summarise(count = n())
@@ -127,10 +148,3 @@ ggplot(day_summary, aes(x = observation_date, y = count)) +
 #------------------------
 
 hbird = read_tsv("data/ebd_calhum_200601_201812_relFeb-2019/ebd_calhum_200601_201812_relFeb-2019.txt")
-#TODO: Keep only 1 record from each group identifier
-#TODO: Keep only columns for SCIENTIFIC NAME, COMMON NAME, LATITUDE, LONGITUDE, 
-#      OBSERVATION DATE (change to Year and Julian Day of Year columns), TIME OBSERVATIONS STARTED,
-#      OBSERVER ID, PROTOCOL TYPE, PROJECT CODE, DURATION MINUTES (previously was hours), 
-#      EFFORT DISTANCE KM, EFFORT AREA HA, NUMBER OBSERVERS
-# TODO: Would this kind of clean up be better to do in a separate script, 
-#       then import the cleaned files directly here? Seems better...?
