@@ -34,6 +34,11 @@ eBird data for 2006--2018 for the 5 hummingbird species from [@supp2015].
 
 Make sure we follow the relevant parts of [eBird best practices](http://strimas.com/ebird-best-practices/).
 
+### eBird data preparation
+For each species, we used the `auk` package to select "Stationary", "Traveling", and "Incidental" eBird records, from 1 Janurary 2008 to 31 December 2018. Some records are part of a group identifier (a group of >1 people recorded birds together), and to account for potential errors in recording bird location (latitude and longitude), we used `read_ebd(unique=FALSE)` to read in all records from a group, instead of just the one with the smallest sampleID. We then grouped all records by common_name, observation_date, and group_identifier, and calculated the mean latitude and longitude to use as the values going forward (latitude2, longitude2). Such discrepancies account for a relatively small proportion of the total number of records (*e.g. for Calliope hummingibrd, ~0.19% of all records*) but we felt it was safest to account for potential errors in this way. After the mean value for location was calculated, we kept only unique sampling identifiers, meaning that only a single record from each group was retained. We created new columns isolating, year, month, and julian day of the year for each record.
+
+
+
 ## Migration routes
 
 We can follow methods from @lasortefranka.2016 to gain population level migration tracks with daily population centroids. This approach uses bootstrapping to get a measure of precision in the track, which may be useful. 
