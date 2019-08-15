@@ -23,14 +23,18 @@ dat <- auk_ebd("data/ebd_calhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/calhum.txt", overwrite=TRUE) %>%
-  read_ebd() %>%
+  # unique=FALSE ensures that all records are brought in, not just one from each group identifier
+  read_ebd(unique=FALSE) %>%
+  # select the columns that will be used
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
          sampling_event_identifier, group_identifier) %>%
-  mutate(sampling_event_identifier = #TODO: Group records may already be aggregated, if so, we don't need this step!
-           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% #TODO: Check that this accomplishes what I want? For all records which are part of a groupID, the groupID is assigned to the sampling event ID #FIXME: I tested this on a smaller version of the dataframe and it seems to work fine. Is there a data issue?
+  # Reassigns Group records to Sampling Event records, so we may next account for discrepancies in recording location among group members.
+  mutate(sampling_event_identifier = 
+           ifelse(is.na(group_identifier), sampling_event_identifier, group_identifier)) %>% 
   group_by(common_name, observation_date, sampling_event_identifier) %>%
+  # check for discrepancies in lat and lon recording, and calculate the mean value
   mutate(latitude2 = mean(latitude), longitude2 = mean(longitude), 
          latdiff = latitude-latitude2, londiff = longitude-longitude2) %>%
   distinct(sampling_event_identifier, .keep_all = TRUE) %>%
@@ -49,8 +53,8 @@ ggplot(day_summary, aes(x = observation_date, y = count)) +
 dat <- auk_ebd("data/ebd_brthum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
-  auk_filter(file = "data/brthum.txt") %>%
-  read_ebd() %>%
+  auk_filter(file = "data/brthum.txt", overwrite=TRUE) %>%
+  read_ebd(unique=FALSE) %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
@@ -78,7 +82,7 @@ dat <- auk_ebd("data/ebd_rufhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/rufhum.txt", overwrite=TRUE) %>%
-  read_ebd() %>%
+  read_ebd(unique=FALSE) %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
@@ -106,7 +110,7 @@ dat <- auk_ebd("data/ebd_bkchum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/bkchum.txt") %>%
-  read_ebd() %>%
+  read_ebd(unique=FALSE) %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
@@ -134,7 +138,7 @@ dat <- auk_ebd("data/ebd_rthhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
   auk_filter(file = "data/rthhum.txt") %>%
-  read_ebd() %>%
+  read_ebd(unique=FALSE) %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
          duration_minutes, effort_distance_km, effort_area_ha, number_observers, 
