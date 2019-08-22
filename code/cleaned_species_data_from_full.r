@@ -109,7 +109,7 @@ ggplot(day_summary, aes(x = observation_date, y = count)) +
 dat <- auk_ebd("data/ebd_bkchum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
-  auk_filter(file = "data/bkchum.txt") %>%
+  auk_filter(file = "data/bkchum.txt", overwrite=TRUE) %>%
   read_ebd(unique=FALSE) %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
@@ -137,7 +137,7 @@ ggplot(day_summary, aes(x = observation_date, y = count)) +
 dat <- auk_ebd("data/ebd_rthhum_200601_201812_relFeb-2019.txt") %>%
   auk_protocol(c("Stationary", "Traveling", "Incidental")) %>%
   auk_date(c("2008-01-01", "2018-12-31")) %>%
-  auk_filter(file = "data/rthhum.txt") %>%
+  auk_filter(file = "data/rthhum.txt", overwrite=TRUE) %>%
   read_ebd(unique=FALSE) %>%
   select(common_name, scientific_name, latitude, longitude, observation_date,
          time_observations_started, observer_id, protocol_type, project_code,
@@ -163,4 +163,4 @@ ggplot(day_summary, aes(x = observation_date, y = count)) +
 
 #------------------------
 
-hbird = read_tsv("data/ebd_calhum_200601_201812_relFeb-2019/ebd_calhum_200601_201812_relFeb-2019.txt")
+#hbird = read_tsv("data/ebd_calhum_200601_201812_relFeb-2019/ebd_calhum_200601_201812_relFeb-2019.txt")

@@ -88,7 +88,7 @@ years = c(2008:2018)
 
 # create a global grid with equal area icosahedron cells 
 # FIXME: In Supp et al., we used grids from Sahr et al at area=12,452 km2. dggridR provides 7,774 or 23,322 km2 as resolutions. Which to use? As small as we can get away with?
-#        Use Fuller4H projection with res=6 (same resolution as other FAL papers)
+#        Use Fuller4H projection with res=6 (same resolution as other FAL)
 dgg <- dgconstruct(res=8)
 
 #Get the corresponding grid cells and center coordinates for all observations in the dataset (lat-long pair)
@@ -112,8 +112,8 @@ grid <- dgcellstogrid(dgg, hbirdcounts$cell, frame=TRUE, wrapcells=TRUE)
 #Update the grid cells' properties to include the number of observations in each cell
 grid <- merge(grid, hbirdcounts, by.x="cell", by.y="cell")
 
-#Get polygons for each north america (currently just USA) and make a map of bird observations
-countries <- map_data("usa")
+#Get polygons for the spatial range and make a map of bird observations
+countries <- map_data("usa") #TODO, add Canada and Mexico to map
 
 ggplot() + 
   geom_polygon(data=countries, aes(x=long, y=lat, group=group), fill=NA, color="black")   +
@@ -122,7 +122,6 @@ ggplot() +
 #  geom_point  (aes(x=cellcenters$lon_deg, y=cellcenters$lat_deg), size=0.5) +
   scale_fill_gradient(low="blue", high="red")
 
-# FIXME: Plot a similar map, but of the total eBird effort by the same grid size?
 
 #------------------------------------- ESTIMATE DAILY POPULATION CENTROID LOCATIONS
 
