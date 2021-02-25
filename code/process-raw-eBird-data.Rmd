@@ -22,6 +22,7 @@ Hummingbirds evaluated include:
 ```{r setup, include=FALSE} 
 knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
+library(here)
 ```
 
 If starting from scratch, input the three raw data files and merge together.
@@ -39,7 +40,7 @@ Load the eBird effort and location files, from FAL (July 2020)
 
 For *A. alexandri*
 ```{r}
-load("data/raw_eBird_data/Archilochus_alexandri.RData") # will come in as ebrd2.c, FAL named previously
+load(here("data/raw_eBird_data/Archilochus_alexandri.RData")) # will come in as ebrd2.c, FAL named previously
 
 # #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
   dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
@@ -54,7 +55,7 @@ load("data/raw_eBird_data/Archilochus_alexandri.RData") # will come in as ebrd2.
 
 For *A. colubris*
 ```{r}
-load("data/raw_eBird_data/Archilochus_colubris.RData") # will come in as ebrd2.c, FAL named previously
+load(here("data/raw_eBird_data/Archilochus_colubris.RData")) # will come in as ebrd2.c, FAL named previously
 
 # #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
   dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
@@ -69,7 +70,7 @@ load("data/raw_eBird_data/Archilochus_colubris.RData") # will come in as ebrd2.c
 
 For *Selasphorus calliope*
 ```{r}
-load("data/raw_eBird_data/Selasphorus_calliope.RData") # will come in as ebrd2.c, FAL named previously
+load(here("data/raw_eBird_data/Selasphorus_calliope.RData")) # will come in as ebrd2.c, FAL named previously
 
 # #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
   dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
@@ -84,7 +85,7 @@ load("data/raw_eBird_data/Selasphorus_calliope.RData") # will come in as ebrd2.c
 
 For *S. platycercus*
 ```{r}
-load("data/raw_eBird_data/Selasphorus_platycercus.Rdata") # will come in as ebrd2.c, FAL named previously
+load(here("data/raw_eBird_data/Selasphorus_platycercus.Rdata")) # will come in as ebrd2.c, FAL named previously
 
 # #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
   dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
@@ -100,7 +101,7 @@ load("data/raw_eBird_data/Selasphorus_platycercus.Rdata") # will come in as ebrd
 
 For *S. rufus*
 ```{r}
-load("data/raw_eBird_data/Selasphorus_rufus.Rdata") # will come in as ebrd2.c, FAL named previously
+load(here("data/raw_eBird_data/Selasphorus_rufus.Rdata")) # will come in as ebrd2.c, FAL named previously
 
 # #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
   dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
