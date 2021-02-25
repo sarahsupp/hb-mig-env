@@ -1,0 +1,567 @@
+---
+title: "Migration-path.Rmd"
+author: "Sarah Supp"
+date: "2/10/2020"
+output: html_document
+---
+
+##Code for hummingbird migration project
+(c) 2020, Supp, Graham, La Sorte, and Graham
+supps@denison.edu
+Denison University
+Code is under development
+Modified from code that is part of Eastern Redcedar project for NSF Multi-Institution Collaborative Award (2019-22) and modified fro previous code developed for Supp et al. 2015 hummingbird paper (Ecography)
+
+Hummingbirds evaluated include: 
+* Black-chinned _Archilochus alexandri_
+* Ruby-throated _A. colubris_
+* Calliope _Selasphorus calliope_
+* Broad-tailed _S. playcercus_
+* Rufous _S. rufus_
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+library(data.table)
+library(devtools)
+#devtools::install_github("dkahle/ggmap")
+library(ggmap)
+library(maptools)
+library(fields)
+library(sp)
+library(raster)
+library(maps)
+library(mapdata)
+library(rgdal)
+library(mgcv)
+library(gamm4) 
+library(tidyverse) 
+library(ggpubr)
+#devtools::install_github('r-barnes/dggridR', vignette=TRUE)
+library(dggridR)
+library(RColorBrewer)
+library(geosphere)
+library(radiant.data)
+library(rnaturalearth)
+#devtools::install_github("ropensci/rnaturalearthhires")
+library(rnaturalearthhires)
+#library(SDMTools)#FIXME: package ‘SDMTools’ is not available (for R version 3.6.2)
+#devtools::install_github("r-spatial/sf") #C compiler error on mac
+#library(geojsonio)
+```
+
+If starting from scratch, input the three raw data files and merge together.
+You need to bring in: 
+1. a file with the bird observations (ebrd2.c)
+2. a file with the total eBirder "effort" (eft.c)
+3. a file with all the center locations for the POLYFID grid cells (locs)
+
+*Please go to the file* called "process-raw-eBird-data.Rmd" to do this, if you don't already have the files named with the pattern dat_effort_****.RData".
+
+**If you have already completed the initial steps** and have saved out the effort file, start here instead, with loading it.
+Each species has it's own merged data file, and will be brought into one species data (spdata) file to work through the results.
+```{r}
+#use here package to make sure that it seeks data files from the top level of the repository
+files = list.files(path=here(), recursive=TRUE, pattern="dat_effort")
+
+spdata <- data.frame(POLYFID=0, YEAR="0", DAY=0, count.x=0, lon=0, lat=0, count.y=0, species="none")
+for (i in files) {
+  dat <- readRDS(here(i))
+  spdata <- bind_rows(spdata, dat)
+}
+spdata <- spdata %>% filter(YEAR!="0")
+```
+
+[La Sorte et al. 2014](https://onlinelibrary.wiley.com/doi/full/10.1111/jbi.12328) defined western, central, and eastern flyways for migrating songbirds. These are general, but since our species include populations across the continent, and we are focused on eastern and midwestern populations of eastern redcedar, we should exclude western occurrences (<103 longitude).
+```{r}
+#Keep eastern flyway only for A. colubris and keep wester flyway only for all other species
+dat_effort <- spdata %>%
+  filter(ifelse(species == "Archilochus colubris", lon >=-103, lon <= -103))
+
+num_obs <- nrow(dat_effort)
+
+paste0("The total number of observations for all species is ", num_obs, ".")
+
+num_spobs <- dat_effort %>%
+  group_by(species) %>%
+  summarise(n())
+
+num_spobs
+```
+
+
+## Weight mean locations 
+Weight species counts by eBirder effort counts for each cell
+```{r} 
+weighted_mean_locs <- dat_effort %>%
+    mutate(DAY = as.numeric(DAY),
+         YEAR = as.numeric(YEAR)) %>%
+group_by(species, YEAR, DAY) %>%
+  summarise(
+            numcells = n(), 
+            numobs = sum(count.x),
+            wtmean_lon = weighted.mean(lon, count.x/count.y), 
+            wtmean_lat = weighted.mean(lat, count.x/count.y) 
+            #wtsd_lon <- weighted.sd(lon, count.x/count.y),
+            #wtsd_lon <- weighted.sd(lat, count.x/count.y) FIXME: add weighted standard deviation
+            ) %>%
+  ungroup()
+```
+
+## Add more detail to dates in the weighted mean location dataframe
+A DATE and MONTH formatted column to mean_daily_locs dataframe. TODO
+An ID column is also added, which is an integer of each of the dates in order, 1-4383.
+**It is important to note when converting to Dates that for this data type only (why!?!) R uses a 0 based index. This means Day 1 is 0. So to convert our "day of year" integers to a Year-Month-Day format, we need to use DAY-1 and YEAR.**
+```{r}
+weighted_mean_locs <- weighted_mean_locs %>%
+  mutate(DAYm1 = DAY-1,
+         origin = paste0(YEAR, "-01-01"),
+         DATE = as.Date(DAYm1, origin=origin), 
+         MONTH = month(DATE)) %>%
+  arrange(species,DATE) %>%
+  ungroup() %>%
+  mutate(ID = row_number()) %>%
+  select(-DAYm1, -origin)
+```
+
+
+Count number of records by year.
+Look for any potentially problematic trends in strong increases in number of obs, number of cells, and should be relatively flat across the number of days per year observed. 
+```{r}
+#count total number of records across the years. (increasing strongly)
+counts <- dat_effort %>%
+  group_by(species, YEAR) %>%
+  tally()
+
+num_bins <- ggplot(counts, aes(YEAR, n)) + geom_bar(stat="identity") + 
+  theme_bw() + ylab("Number of binned observations") + xlab("Year") +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  facet_wrap(~species, ncol=1)
+
+#checking how many unique grid cells logged an observation in each year (relatively flat)
+nPOLYFID <- dat_effort %>%
+  group_by(species, YEAR) %>%
+  summarise(n=n_distinct(POLYFID))
+
+num_gridcells <- ggplot(nPOLYFID, aes(YEAR, n)) + geom_bar(stat="identity") + 
+  theme_bw() + ylab("Number of unique grid cells") + xlab("Year") +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  facet_wrap(~species, ncol=1)
+
+#checking how many days per year have at least 1 observation (ALL of them)
+nDAYSofyear <- dat_effort %>%
+  group_by(species, YEAR) %>%
+  summarise(n=n_distinct(DAY))
+
+num_days <- ggplot(nDAYSofyear, aes(YEAR, n)) + geom_bar(stat="identity") + 
+  theme_bw() + ylab("Number of unique days per year") + xlab("Year") +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  facet_wrap(~species, ncol=1)
+
+ggarrange(num_bins, num_gridcells, num_days,
+          labels=c("A", "B", "C"),
+          ncol=3, nrow=1)
+
+ggsave(filename = here("figures/species_obs.png"), height = 11, width=8)
+```
+
+
+Initial plot of bird average locations for hummingbird species and latitude by day across years.
+```{r}
+# ggplot(weighted_mean_locs, aes(wtmean_lon, wtmean_lat)) +
+#   geom_point(alpha=0.25) + geom_line(alpha=0.25) +
+#   facet_wrap(~YEAR)
+
+ggplot(weighted_mean_locs, aes(DAY, wtmean_lat, group=YEAR)) +
+  geom_point(alpha=0.25, aes(col=species)) + geom_line(alpha=0.25) +
+  facet_wrap(~YEAR)
+
+ggplot(weighted_mean_locs, aes(as.numeric(DAY), wtmean_lat, group=YEAR)) +
+  stat_smooth(aes(col=as.numeric(YEAR))) + ylab("Weighted mean latitude") +
+  xlab("Day of the year") + 
+  scale_x_continuous(breaks = seq(1, 366, by = 60)) +
+  facet_wrap(~species)
+```
+
+
+## Calculates the count of observations within each cell, 
+weighted by total eBirder effort on that day in a given cell. 
+Appends into the dataframe as "count_weighted" for analysis. Weighted as the total number of observations of the target species in a cell divided by the total number of eBirder records in a cell.
+```{r}
+dgg <- dgconstruct(project = "FULLER", aperture = 4, topology = "HEXAGON", res = 6)
+dat_effort$cell <- dgGEO_to_SEQNUM(dgg, dat_effort$lon, dat_effort$lat)$seqnum
+dat_effort$cell_lat <- dgSEQNUM_to_GEO(dgg, dat_effort$cell)$lat_deg 
+dat_effort$cell_lon <- dgSEQNUM_to_GEO(dgg, dat_effort$cell)$lon_deg 
+
+dat_effort <- dat_effort %>%
+  mutate(count_weighted = count.x/count.y)
+
+
+#cellcenters   <- dgSEQNUM_to_GEO(dgg, dat_effort$cell)
+spp_counts <- dat_effort %>%
+  group_by(species, cell) %>% 
+  summarise(sum_weighted_count=sum(count_weighted),
+            mean_weighted_count=mean(count_weighted),
+            sum_count=sum(count.x))
+# 
+# ggplot(spp_counts, aes(x=sum_weighted_count)) +
+#   geom_histogram(binwidth=10)
+
+ggplot(spp_counts, aes(x=mean_weighted_count)) +
+  geom_histogram(binwidth=0.01) + 
+  facet_wrap(~species)
+# 
+# ggplot(spp_counts, aes(x=sum_count)) +
+#   geom_histogram(binwidth=100)
+```
+
+
+## Create a map of eBird effort (all years, all dates)
+across eastern North America
+
+```{r}
+#Get the grid cell boundaries for cells which had bird observations
+grid <- dgcellstogrid(dgg, spp_counts$cell, frame=TRUE, wrapcells=TRUE)
+
+#Update the grid cells' properties to include the number of observations in each cell
+grid <- merge(grid, spp_counts, by.x="cell", by.y="cell")
+# #zoom to just eastern USA
+# grid <- grid %>%
+#   filter(long >= -103,
+#          lat >= 25)
+#Get polygons for the spatial range and make a map of bird observations
+countries <- map_data("usa") 
+
+ggplot() + 
+  geom_polygon(data=countries, aes(x=long, y=lat, group=group), fill=NA, color="black")   +
+  geom_polygon(data=grid, aes(x=long, y=lat, group=cell, fill=mean_weighted_count), alpha=0.4)    +
+  geom_path   (data=grid, aes(x=long, y=lat, group=cell), alpha=0.4, color="white") +
+#  geom_point  (aes(x=cellcenters$lon_deg, y=cellcenters$lat_deg), size=0.5) +
+  scale_fill_gradient(low="gray90", high="black") + 
+  #scale_fill_gradient2(low="blue", high="red", midpoint = 250) 
+  theme_bw() + 
+  facet_wrap(~species)
+```
+
+
+## Create a map of counts (all years, all dates)
+across North America
+
+```{r}
+#TODO: Make how you prefer, but feel free to plot the data as the actual locations of the birds 
+#       (from the .csv files), or to use the .Rdata files to plot the polygon center, maybe with 
+#       point sized or colored by magnitude of the count.
+
+#all_states <- map_data("state")
+state_prov <- rnaturalearth::ne_states(c("united states of america", "canada"))
+#states <- subset(all_states, region %in% c('ohio', 'michigan', 'kentucky', 'tennessee', 'indiana', 
+#                                           'illinois', 'iowa', 'nebraska','south dakota', 'north dakota',
+#                                           'minnesota', 'wisconsin', 'missouri', 'kansas'))
+uw_spp_counts <- dat_effort %>%
+  group_by(species, cell) %>% 
+  summarise(count_new_uw=sum(count.x))
+
+uw_grid <- dgcellstogrid(dgg, uw_spp_counts$cell, frame=TRUE, wrapcells=TRUE)
+uw_grid <- merge(grid, uw_spp_counts, by.x=c("cell", "species"), by.y=c("cell", "species")) 
+
+p <- ggplot() +
+  geom_polygon(data=state_prov, 
+                aes(x=long, y=lat, group = group), colour="black", fill="white") +
+  geom_polygon(data=uw_grid, 
+               aes(x=long, y=lat, group=cell, fill=count_new_uw)) +
+  geom_path(data=uw_grid, 
+            aes(x=long, y=lat, group=cell), alpha=0.4, color="white") +
+  xlim(-157,-52) +
+#  geom_point  (aes(x=cellcenters$lon_deg, y=cellcenters$lat_deg), size=0.5) +
+  scale_fill_gradient(low="red", high="yellow") +
+#  scale_fill_gradient2(low="blue", high="red",midpoint = 10000 ) +
+  labs(title="Bird locations") + 
+  theme_bw() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) + 
+  facet_wrap(~species)
+p
+```
+
+
+## Estimate migration pathway for Bombycilla each year separately using GAMs
+Use GAM model to predict daily location along a smoothing line, from the weighted mean locations. Daily location should be calculated for each year separately.
+
+In the GAM, we can use the weighted mean locations (latitude and longitude) that we have already calculated above. These become the inputs to the gam model, which finds the predicted (smooth) migration path for each day. The predicted (fitted) values become the migration path for the species, which we will then use to estimate start of spring, peak latitude (breeding), and end of autumn migration. Between end Autumn migration and begin of Spring migration, is the expected time that most individual birds are on their wintering grounds and not actively migrating. 
+
+*Creates a dataframe with daily location for each year and graphs results*
+```{r}
+Estimatedailylocs = function(dat) {
+  
+  x <- c(2008:2019)
+  spp <- unique(dat$species)
+
+  df <- data.frame(species = "none", DAY = 0, YEAR =0, MONTH = 0, lon = 0, lat = 0, lon_se = 0, lat_se = 0)
+  
+  for (s in spp){
+    for (i in x) {
+      sub_weighted_mean_locs <- 
+        dat %>%
+        filter(YEAR == i & species == s)
+      
+      lon_gam = gam(wtmean_lon ~ s(DAY, k=20), data = sub_weighted_mean_locs, gamma = 1.5)
+      lat_gam = gam(wtmean_lat ~ s(DAY, k=20), data = sub_weighted_mean_locs, gamma = 1.5)
+      xpred = data.frame(DAY=sort(unique(sub_weighted_mean_locs$DAY)))
+      lonpred = predict(lon_gam, newdata = xpred, type="response", se.fit=T)
+      latpred = predict(lat_gam, newdata = xpred, type="response", se.fit=T)
+      
+      preds =  data.frame(species = s, DAY = xpred$DAY, YEAR = i, 
+                          MONTH = sub_weighted_mean_locs$MONTH, 
+                          lon = lonpred$fit, lat = latpred$fit, lon_se = lonpred$se.fit, lat_se = latpred$se.fit)
+      df <- data.frame(bind_rows(df, preds))
+    }
+  }
+  df = df[-1,]
+  return(df)
+}
+
+#get daily centroid locations for all species in all years
+dailylocs <- Estimatedailylocs(weighted_mean_locs)
+
+ggplot(dailylocs, aes(DAY, lat)) + geom_line(size=1, aes(col=species)) + 
+  # geom_vline(xintercept=c(101, 209, 362), col="gray30") + #FIXME: Update xintercepts with dates
+  facet_wrap( ~ YEAR, ncol=3)+ xlab("Day of Year") + ylab("weighted mean latitude") +
+  theme_bw()
+
+ggplot(dailylocs, aes(lon, lat, group=YEAR)) +
+  geom_point(aes(col=as.factor(MONTH)), alpha=0.25) + 
+  facet_wrap(~species)
+```
+
+
+## Find the distances traveled between the mean locations. 
+This calculation uses Great Circle (ellipsoid) distance on the estimated daily locations from the GAM model predictions for latitude and longitude. Because of the way the distVicentyEllipsoid function works on the values, the rows *must* all be in chronological order.
+```{r}
+#FIXME: THESE DISTANCES ARE MUCH TOO LARGE. SOMETHING MUST HAVE GONE WRONG WHEN I ADDED THE OTHER SPECIES.
+
+#calculate sequential distances using geosphere::distVicentyEllipsoid, adds NA for the first record
+calc_distances <- function(lon, lat) {
+  m <- cbind(lon,lat)
+  dist <- append(NA, distVincentyEllipsoid(m))/1000
+  return(dist)
+}
+
+dailylocs <- dailylocs %>%
+  # ensures that everything is ordered chronologically by year and day of year
+  arrange(species, YEAR, DAY) %>%
+  group_by(species) %>%
+  #calculate sequential distances, adds NA for the first record
+  mutate(distance = calc_distances(lon, lat)) %>%
+  #Remove Day 1 for all year, because due to our method of separating GAM by year, it will be a flawed value
+  filter(DAY != 1)
+  
+# # ensures that everything is ordered chronologically by year and day of year
+# dailylocs <- dailylocs %>%
+#   arrange(YEAR,DAY)
+# 
+# # add column to original dataset
+# dailylocs$distance <- distances
+# 
+# #Remove Day 1 for all year, because we know, due to our method of separating GAM by year, it will be a flawed value
+# dailylocs <- dailylocs %>%
+#   filter(DAY != 1)
+
+#TODO: If placed after the dates are calculated, then the speeds used can be limited to the migration seasons using the filter below. Not sure we need to do that here, but I think this is how I got around the year-to-year day 1 being wrong things last time, plus, that project was really only focused on th e migration seasons alone.
+#  filter(DAY >= migration_dates$spring_begin & migration_dates <= migration_dates$autumn_end)
+
+#FIXME: 
+ggplot(dailylocs, aes(as.numeric(DAY), distance, group=YEAR)) + geom_line(aes(col=species)) + 
+  theme_bw() + xlab("Julian Day") + ylab("Distance Traveled (km)") + 
+  theme(text = element_text(size=20)) + 
+  facet_wrap(~species)#+  
+  #geom_vline(xintercept = median(migr_dates), col = "indianred", linetype = "dashed")
+```
+
+## Estimate the maximum migration speed during migration 
+First, remove all values for Day = 1. Because each GAM was calculated separately by year, distance between Dec 31 and Jan 1 will not be valid. 
+Use the median of the top 5 migration speeds for each year separately, as the estimated maximum migration speed (km/day) for the species. 
+```{r}
+
+# function to estimate the maximum speed of migration (km/day)
+EstimateMaxSpeed = function(dat) {
+  dat <- dat %>%
+  filter(DAY != 1)
+  years <- c(2008:2019)
+  species <- unique(dat$species)
+  df <- data.frame(species = "none", YEAR = 0, MAX_SPEED = 0)
+  for (s in species){
+    for (i in years){
+   sub_dailylocs <- 
+       dailylocs %>%
+       filter(YEAR == i & species == s)
+  
+    median <- median(tail(sort(sub_dailylocs$distance),5))
+  
+    max_speed <-  data.frame(species = s, YEAR = i, MAX_SPEED = median)
+  
+    df <- data.frame(bind_rows(df, max_speed))
+  
+    }
+  }
+  df = df[-1,]
+return(df)
+}
+
+#estimate the maximim migration speed for each year
+max_speed <- EstimateMaxSpeed(dailylocs)
+
+speeds <- max_speed %>%
+  group_by(species) %>%
+  summarise(
+    mean = mean(MAX_SPEED),
+    sd = sd(MAX_SPEED),
+    median = median(MAX_SPEED)
+  )
+
+#plot the results estimating yearly maximum migration speed (km/day)
+ggplot(max_speed, aes(YEAR, MAX_SPEED)) + geom_line(aes(col=species)) + 
+  theme_bw() + xlab("Year") + ylab("Max Speed (km/day)") + 
+  theme(text = element_text(size=20))
+
+#suggest using points instead of lines, because we're not really plotting something continuous with an expected trend here, where speed in one year depends on speed in the previous year (depends on weather/climate?)
+ggplot(max_speed, aes(as.factor(YEAR), MAX_SPEED)) + geom_point() +
+  #geom_hline(yintercept = med, linetype="dashed", col="hotpink") +
+  theme_bw() + xlab("Year") + ylab("Max Speed (km/day)") + 
+  theme(text = element_text(size=20), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+ # annotate(geom="text", x= 3, y= 50, label=paste0("median = ", round(med,2), " km/day")) + 
+  facet_wrap(~species)
+
+#ggsave(filename = "figs/WOTH_MedMaxMigrationSpeed.png")
+```
+
+
+
+# estimate 3 migration dates, beginning of spring, peak latitude (summer), end of fall migration
+This will need some editing to work on each year separately. Ideally a resulting data frame with columns for year, begin_spring, peak_latitude, end_autumn
+
+Ask Dr. Supp if you have questions :)
+```{r}
+# TODO: from old function Est3MigrationDates in migration-fxns.R
+
+Est3MigrationDates = function(dat){
+  #takes in predicted centroids for migration path, and estimates the beginning of spring migration,
+  # the end of fall migration, and the date where the species reaches maximum latitude.
+  dat <- dat %>%
+  filter(DAY != 1)
+  year <- c(2008:2019)
+  species <- unique(dat$species)
+  df <- data.frame(species="none", YEAR=0, SPRING = 0, MAXLAT = 0, FALL = 0)
+  for (s in species) {
+    for (i in 1:length(year)){
+   dat_subset <- 
+       dat %>%
+       filter(YEAR == year[i] & species == s)
+   print(paste0("species: ", s, " year: ", year[i]))
+    #GAM model on predicted latitude of centroids by julian date
+    #gam1 = gam(wtmean_lat ~ s(DAY, k = 40), data = dat, gamma = 1.5) 
+    #xpred = data.frame(DAY = c(1:max(dat$DAY)))
+    #dpred = predict(gam1, newdata=xpred, type="response", se.fit=TRUE)
+    
+    ## cutoff based on 2 SE for spring and fall combined, following La Sorte et al. 2013 methods
+    # Spring migration should be between 11 Jan and 9 July
+    # Fall migration should be between 8 August and 21 Dec
+    #NOTE: These dates are seeking Jan 1-May 31 for Spring migration begin
+    #                 AND          Aug 1-Dec 30 for Fall migration end 
+   # CHANGED FROM PREVIOUS CODE FOR HUMMINGBIRD PROJECT
+   # ALSO ADDED NA.RM=TRUE ARGUMENT, DOES THIS HAVE ANY DOWNSIDES?
+    spring_threshold = min(dat_subset$lat_se[c(1:151)]*2.56 + dat_subset$lat[c(1:151)], na.rm=TRUE)
+    fall_threshold = min(dat_subset$lat_se[c(213:364)]*2.56 + dat_subset$lat[c(213:364)], na.rm=TRUE)
+    #FIXME: after removing DAY=1, there are years with 364 days and with 365 days.If we ignore the last day of the leap years, will this influence fall threshold?
+    spring_index = 11:190 # between 11 Jan and 9 July
+    fall_index = 220:355 # between 8 August and 21 Dec
+    spring_max = spring_index[which.max(dat_subset$lat[spring_index])]
+    fall_max = fall_index[which.max(dat_subset$lat[fall_index])]
+    
+    #identify beginning of spring migration
+    tst = 1000
+    spring_index2 = spring_max
+    while(tst > spring_threshold){
+      tst = dat_subset$lat[spring_index2]
+      if(spring_index2 == 1) break
+      spring_index2 = spring_index2 - 1
+    }
+    spring_begin = spring_index2 + 1
+    
+    #identify end of fall migration
+    tst <- 1000
+    fall_index2 = fall_max
+    while(tst > fall_threshold){
+      tst = dat_subset$lat[fall_index2]
+      if(fall_index2==364) break
+      fall_index2 <- fall_index2 + 1
+    }
+    fall_end <- fall_index2 - 1
+    
+    max_lat =   dat_subset$DAY[which.max(dat_subset$lat[dat_subset$DAY])]
+    
+    dates = data.frame(species = s, YEAR = year[i], SPRING = spring_begin, MAXLAT = max_lat, FALL = fall_end)
+    
+    df <- data.frame(bind_rows(df, dates))
+    }
+  }
+  df = df[-1,]
+return(df)
+}
+
+#blue jays don't really migrate? remove them from this part of the analysis:
+dailylocs_4spp <- dailylocs %>% filter(species != "Cyanocitta cristata")
+dates <- Est3MigrationDates(dailylocs_4spp) 
+
+median_migdates <- dates %>%
+  group_by(species) %>%
+  summarise(begin_winter = median(FALL),
+            end_winter = median(SPRING))
+
+# paste0("The beginning of winter is on average day ", begin_winter, " and the end of winter is on average day ", end_winter, ".")
+
+begin <- ggplot(dates, aes(YEAR, FALL)) + 
+  geom_point() + 
+  geom_smooth(method="lm") +
+  #geom_hline(yintercept = begin_winter, linetype="dashed", col="hotpink") +
+  theme_bw() + xlab("Year") + ylab("Winter begin date") + 
+  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+ # annotate(geom="text", x= 2012, y= 340, label=paste0("median doy = ", round(begin_winter,2)))
+  facet_wrap(~species)
+
+end <- ggplot(dates, aes(YEAR, SPRING)) + 
+  geom_point() + 
+  geom_smooth(method="lm") +
+ # geom_hline(yintercept = end_winter, linetype="dashed", col="hotpink") +
+  theme_bw() + xlab("Year") + ylab("Winter end date") + 
+  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  #annotate(geom="text", x= 2012, y= 55, label=paste0("median doy = ", round(end_winter,2)))
+  facet_wrap(~species)
+
+ggarrange(begin, end,
+          labels=c("A", "B"),
+          ncol=2, nrow=1)
+
+ggsave(filename = "figs/allspp_winterDates.png", height = 5, width=8)
+```
+
+
+
+#Add Season to dailylocs
+#Map based on GAM Model
+
+```{r}
+qmplot(lon, lat, data = dailylocs, color = YEAR)
+
+```
+
+```{r}
+qmplot(lon, lat, data = dailylocs, color = DAY)
+
+```
+
+
