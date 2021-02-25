@@ -1,0 +1,115 @@
+---
+title: "process-eBird-data"
+author: "Sarah Supp"
+date: "2/19/2021"
+output: html_document
+---
+
+##Code for hummingbird migration project
+(c) 2020, Supp, Graham, La Sorte, and Graham
+supps@denison.edu
+Denison University
+Code is under development
+Modified from code that is part of Eastern Redcedar project for NSF Multi-Institution Collaborative Award (2019-22) and modified fro previous code developed for Supp et al. 2015 hummingbird paper (Ecography)
+
+Hummingbirds evaluated include: 
+* Black-chinned _Archilochus alexandri_
+* Ruby-throated _A. colubris_
+* Calliope _Selasphorus calliope_
+* Broad-tailed _S. playcercus_
+* Rufous _S. rufus_
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+```
+
+If starting from scratch, input the three raw data files and merge together.
+You need to bring in: 
+1. a file with the bird observations (ebrd2.c)
+2. a file with the total eBirder "effort" (eft.c)
+3. a file with all the center locations for the POLYFID grid cells (locs)
+
+Load the eBird effort and location files, from FAL (July 2020)
+```{r}
+# raw eBirder data, queried by FAL
+ load("data/raw_eBird_data/effort2020.Rdata") # will come in as eft.c, FAL named previously
+ load("data/raw_eBird_data/locs_2020.Rdata") # will come in as locs, FAL named previously
+```
+
+For *A. alexandri*
+```{r}
+load("data/raw_eBird_data/Archilochus_alexandri.RData") # will come in as ebrd2.c, FAL named previously
+
+# #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
+  dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
+  
+  #now merge with the third data file for effort 
+  #where count.x is number of target species and count.y is total number of eBird records (including those without the target species)
+  dat_effort = merge(dat_merged, eft.c, by.x = c("POLYFID", "YEAR", "DAY"), by.y = c("POLYFID","YEAR",  "DAY")) 
+  dat_effort$DAY <- as.numeric(dat_effort$DAY) 
+  dat_effort$species <- "Archilochus alexandri"
+  saveRDS(dat_effort, file = "data/dat_effort_bchu.rds")
+```
+
+For *A. colubris*
+```{r}
+load("data/raw_eBird_data/Archilochus_colubris.RData") # will come in as ebrd2.c, FAL named previously
+
+# #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
+  dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
+  
+  #now merge with the third data file for effort 
+  #where count.x is number of target species and count.y is total number of eBird records (including those without the target species)
+  dat_effort = merge(dat_merged, eft.c, by.x = c("POLYFID", "YEAR", "DAY"), by.y = c("POLYFID","YEAR",  "DAY")) 
+  dat_effort$DAY <- as.numeric(dat_effort$DAY) 
+  dat_effort$species <- "Archilochus colubris"
+  saveRDS(dat_effort, file = "data/dat_effort_rthu.rds")
+```
+
+For *Selasphorus calliope*
+```{r}
+load("data/raw_eBird_data/Selasphorus_calliope.RData") # will come in as ebrd2.c, FAL named previously
+
+# #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
+  dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
+  
+  #now merge with the third data file for effort 
+  #where count.x is number of target species and count.y is total number of eBird records (including those without the target species)
+  dat_effort = merge(dat_merged, eft.c, by.x = c("POLYFID", "YEAR", "DAY"), by.y = c("POLYFID","YEAR",  "DAY")) 
+  dat_effort$DAY <- as.numeric(dat_effort$DAY) 
+  dat_effort$species <- "Selasphorus calliope"
+  saveRDS(dat_effort, file = "data/dat_effort_cahu.rds")
+```
+
+For *S. platycercus*
+```{r}
+load("data/raw_eBird_data/Selasphorus_platycercus.Rdata") # will come in as ebrd2.c, FAL named previously
+
+# #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
+  dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
+  
+  #now merge with the third data file for effort 
+  #where count.x is number of target species and count.y is total number of eBird records (including those without the target species)
+  dat_effort = merge(dat_merged, eft.c, by.x = c("POLYFID", "YEAR", "DAY"), by.y = c("POLYFID","YEAR",  "DAY")) 
+  dat_effort$DAY <- as.numeric(dat_effort$DAY) 
+  dat_effort$species <- "Selasphorus platycercus"
+  saveRDS(dat_effort, file = "data/dat_effort_bthu.rds")
+```
+
+
+For *S. rufus*
+```{r}
+load("data/raw_eBird_data/Selasphorus_rufus.Rdata") # will come in as ebrd2.c, FAL named previously
+
+# #merge locations data on POLYFID so it includes the center of each hex cell (LONGITUDE.y, LATITUDE.y)
+  dat_merged = merge(ebrd2.c, locs, by.x = "POLYFID", by.y = "POLYFID")
+  
+  #now merge with the third data file for effort 
+  #where count.x is number of target species and count.y is total number of eBird records (including those without the target species)
+  dat_effort = merge(dat_merged, eft.c, by.x = c("POLYFID", "YEAR", "DAY"), by.y = c("POLYFID","YEAR",  "DAY")) 
+  dat_effort$DAY <- as.numeric(dat_effort$DAY) 
+  dat_effort$species <- "Selasphorus rufus"
+  saveRDS(dat_effort, file = "data/dat_effort_ruhu.rds")
+```
+
