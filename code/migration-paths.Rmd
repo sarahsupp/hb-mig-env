@@ -566,5 +566,7 @@ ggarrange(spring, peak, fall,
 ggsave(filename = "figures/allspp_migrationDates.png", height = 11, width=8)
 ```
 
-
+Interestingly, a few species in the images above seem to be arriving at the winter grounds later every year (S. rufus), while maintaining similar spring and peak lat dates. Others (S. platycercus, S. calliope A. colubris) may be reaching winter grounds slightly earlier in the year (or is this small enough effect to be sampling artefact?).  
+Other species may be experiencing some changes to spring, where (A. archilochus is staying longer in its winter grounds (delayed spring migration) and S. calliope and S. platycercus may be adcancing their spring migration to leave slightly earlier each year.
+Peak latitude (popualation is no longer moving strongly northwards) appears to be fairly flat for most species across the time series. 
 
