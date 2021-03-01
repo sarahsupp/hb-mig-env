@@ -450,16 +450,17 @@ Est3MigrationDates = function(dat){
   #takes in predicted centroids for migration path, and estimates the beginning of spring migration,
   # the end of fall migration, and the date where the species reaches maximum latitude.
   dat <- dat %>%
-  filter(DAY != 1)
+    filter(DAY != 1)
   year <- c(2008:2019)
   species <- unique(dat$species)
   df <- data.frame(species="none", YEAR=0, SPRING = 0, MAXLAT = 0, FALL = 0)
   for (s in species) {
-    for (i in 1:length(year)){
+    for (y in year){
    dat_subset <- 
        dat %>%
-       filter(YEAR == year[i] & species == s)
-   print(paste0("species: ", s, " year: ", year[i]))
+       filter(YEAR == y & species == s) %>%
+     filter(!is.na(lon))
+   print(paste0("species: ", s, " year: ", y))
     #GAM model on predicted latitude of centroids by julian date
     #gam1 = gam(wtmean_lat ~ s(DAY, k = 40), data = dat, gamma = 1.5) 
     #xpred = data.frame(DAY = c(1:max(dat$DAY)))
@@ -472,21 +473,26 @@ Est3MigrationDates = function(dat){
     #                 AND          Aug 1-Dec 30 for Fall migration end 
    # CHANGED FROM PREVIOUS CODE FOR HUMMINGBIRD PROJECT
    # ALSO ADDED NA.RM=TRUE ARGUMENT, DOES THIS HAVE ANY DOWNSIDES?
-    spring_threshold = min(dat_subset$lat_se[c(1:151)]*2.56 + dat_subset$lat[c(1:151)], na.rm=TRUE)
-    fall_threshold = min(dat_subset$lat_se[c(213:364)]*2.56 + dat_subset$lat[c(213:364)], na.rm=TRUE)
+   spring_threshold = min(filter(dat_subset, DAY %in% c(1:151))$lat_se*2.56 + filter(dat_subset, DAY %in% c(1:151))$lat)
+   fall_threshold = min(filter(dat_subset, DAY %in% c(213:364))$lat_se*2.56 + filter(dat_subset, DAY %in% c(213:364))$lat)
     #FIXME: after removing DAY=1, there are years with 364 days and with 365 days.If we ignore the last day of the leap years, will this influence fall threshold?
-    spring_index = 11:190 # between 11 Jan and 9 July
-    fall_index = 220:355 # between 8 August and 21 Dec
-    spring_max = spring_index[which.max(dat_subset$lat[spring_index])]
-    fall_max = fall_index[which.max(dat_subset$lat[fall_index])]
+    #FIXME: An issue is also occurring due to all the NA values, I think. Find a slightly different way to index through values?
+    spring_index = intersect(c(11:190), dat_subset$DAY) # between 11 Jan and 9 July #FIXME: what should these dates be, they don't match
+    fall_index = intersect(c(220:355), dat_subset$DAY) # between 8 August and 21 Dec
+    spring_max = (dat_subset %>% filter(DAY %in% spring_index) %>% slice_max(lat))$DAY
+    fall_max =  (dat_subset %>% filter(DAY %in% fall_index) %>% slice_max(lat))$DAY
     
     #identify beginning of spring migration
     tst = 1000
     spring_index2 = spring_max
     while(tst > spring_threshold){
-      tst = dat_subset$lat[spring_index2]
-      if(spring_index2 == 1) break
-      spring_index2 = spring_index2 - 1
+      if(nrow(filter(dat_subset, DAY==spring_index2))>0) {
+        tst = filter(dat_subset, DAY %in% spring_index2)$lat
+      #tst = dat_subset$lat[spring_index2]
+        if(spring_index2 == 1) break
+        spring_index2 = spring_index2 - 1
+      }
+      else { spring_index2 = spring_index2 - 1 }
     }
     spring_begin = spring_index2 + 1
     
@@ -494,15 +500,20 @@ Est3MigrationDates = function(dat){
     tst <- 1000
     fall_index2 = fall_max
     while(tst > fall_threshold){
-      tst = dat_subset$lat[fall_index2]
-      if(fall_index2==364) break
-      fall_index2 <- fall_index2 + 1
+      if(nrow(filter(dat_subset, DAY==fall_index2))>0) {
+        tst = filter(dat_subset, DAY %in% fall_index2)$lat
+      #tst = dat_subset$lat[spring_index2]
+        if(fall_index2 == 1) break
+        fall_index2 = fall_index2 + 1
+      }
+      else { fall_index2 = fall_index2 + 1 }
     }
     fall_end <- fall_index2 - 1
     
-    max_lat =   dat_subset$DAY[which.max(dat_subset$lat[dat_subset$DAY])]
+    # find center of the season, maximum latitute (e.g. population is no longer moving further north; breeding)
+    max_lat = dat_subset[dat_subset$lat == max(dat_subset$lat),]$DAY
     
-    dates = data.frame(species = s, YEAR = year[i], SPRING = spring_begin, MAXLAT = max_lat, FALL = fall_end)
+    dates = data.frame(species = s, YEAR = y, SPRING = spring_begin, MAXLAT = max_lat, FALL = fall_end)
     
     df <- data.frame(bind_rows(df, dates))
     }
@@ -511,55 +522,49 @@ Est3MigrationDates = function(dat){
 return(df)
 }
 
-#blue jays don't really migrate? remove them from this part of the analysis:
-dailylocs_4spp <- dailylocs %>% filter(species != "Cyanocitta cristata")
-dates <- Est3MigrationDates(dailylocs_4spp) 
+dates <- Est3MigrationDates(dailylocs) 
 
 median_migdates <- dates %>%
   group_by(species) %>%
-  summarise(begin_winter = median(FALL),
-            end_winter = median(SPRING))
+  summarise(begin_spring = median(SPRING),
+            peak_lat = median(MAXLAT),
+            end_fall = median(FALL))
 
 # paste0("The beginning of winter is on average day ", begin_winter, " and the end of winter is on average day ", end_winter, ".")
 
-begin <- ggplot(dates, aes(YEAR, FALL)) + 
-  geom_point() + 
-  geom_smooth(method="lm") +
-  #geom_hline(yintercept = begin_winter, linetype="dashed", col="hotpink") +
-  theme_bw() + xlab("Year") + ylab("Winter begin date") + 
-  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
- # annotate(geom="text", x= 2012, y= 340, label=paste0("median doy = ", round(begin_winter,2)))
-  facet_wrap(~species)
-
-end <- ggplot(dates, aes(YEAR, SPRING)) + 
+spring <- ggplot(dates, aes(YEAR, SPRING)) + 
   geom_point() + 
   geom_smooth(method="lm") +
  # geom_hline(yintercept = end_winter, linetype="dashed", col="hotpink") +
-  theme_bw() + xlab("Year") + ylab("Winter end date") + 
+  theme_bw() + xlab("Year") + ylab("spring begin migration date") + 
   theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
   #annotate(geom="text", x= 2012, y= 55, label=paste0("median doy = ", round(end_winter,2)))
   facet_wrap(~species)
 
-ggarrange(begin, end,
-          labels=c("A", "B"),
-          ncol=2, nrow=1)
+peak <- ggplot(dates, aes(YEAR, MAXLAT)) + 
+  geom_point() + 
+  geom_smooth(method="lm") +
+ # geom_hline(yintercept = end_winter, linetype="dashed", col="hotpink") +
+  theme_bw() + xlab("Year") + ylab("peak latitude (breeding) date") + 
+  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  #annotate(geom="text", x= 2012, y= 55, label=paste0("median doy = ", round(end_winter,2)))
+  facet_wrap(~species)
 
-ggsave(filename = "figs/allspp_winterDates.png", height = 5, width=8)
+fall <- ggplot(dates, aes(YEAR, FALL)) + 
+  geom_point() + 
+  geom_smooth(method="lm") +
+  #geom_hline(yintercept = begin_winter, linetype="dashed", col="hotpink") +
+  theme_bw() + xlab("Year") + ylab("fall end migration date") + 
+  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+ # annotate(geom="text", x= 2012, y= 340, label=paste0("median doy = ", round(begin_winter,2)))
+  facet_wrap(~species)
+
+
+ggarrange(spring, peak, fall,
+          labels=c("A", "B", "C"))
+
+ggsave(filename = "figures/allspp_migrationDates.png", height = 11, width=8)
 ```
 
-
-
-#Add Season to dailylocs
-#Map based on GAM Model
-
-```{r}
-qmplot(lon, lat, data = dailylocs, color = YEAR)
-
-```
-
-```{r}
-qmplot(lon, lat, data = dailylocs, color = DAY)
-
-```
 
 
