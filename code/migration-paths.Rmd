@@ -289,7 +289,7 @@ p
 ```
 
 
-## Estimate migration pathway for Bombycilla each year separately using GAMs
+## Estimate migration pathway for hbirds each year separately using GAMs
 Use GAM model to predict daily location along a smoothing line, from the weighted mean locations. Daily location should be calculated for each year separately.
 
 In the GAM, we can use the weighted mean locations (latitude and longitude) that we have already calculated above. These become the inputs to the gam model, which finds the predicted (smooth) migration path for each day. The predicted (fitted) values become the migration path for the species, which we will then use to estimate start of spring, peak latitude (breeding), and end of autumn migration. Between end Autumn migration and begin of Spring migration, is the expected time that most individual birds are on their wintering grounds and not actively migrating. 
@@ -342,8 +342,6 @@ ggplot(dailylocs, aes(lon, lat, group=YEAR)) +
 ## Find the distances traveled between the mean locations, add NA values for all missing days of the year. 
 This calculation uses Great Circle (ellipsoid) distance on the estimated daily locations from the GAM model predictions for latitude and longitude. Because of the way the distVicentyEllipsoid function works on the values, the rows *must* all be in chronological order.
 ```{r}
-#FIXME: THESE DISTANCES ARE MUCH TOO LARGE. SOMETHING MUST HAVE GONE WRONG WHEN I ADDED THE OTHER SPECIES.
-# TODO: THE CODE WORKS, BUT IT CALCULATES THE WRONG VALUES BECAUSE SOMETIMES THERE ARE NOT DISTANCES BETWEEN DAYS, BUT BETWEEN LONGER PERIODS OF TIME.
 #identify dates with no location and assign all values to NA
 missdates <- dailylocs %>%
   group_by(species, YEAR) %>%
@@ -371,7 +369,7 @@ dailylocs <- dailylocs %>%
   #Remove Day 1 for all year, because due to our method of separating GAM by year, it will be a flawed value
   filter(DAY != 1)
 
-#TODO: If placed after the dates are calculated, then the speeds used can be limited to the migration seasons using the filter below. Not sure we need to do that here, but I think this is how I got around the year-to-year day 1 being wrong things last time, plus, that project was really only focused on th e migration seasons alone.
+#TODO: If placed after the dates are calculated, then the speeds used can be limited to the migration seasons using the filter below. Not sure we need to do that here, but I think this is how I got around the year-to-year day 1 being wrong things last time, plus, that project was really only focused on the migration seasons alone.
 #  filter(DAY >= migration_dates$spring_begin & migration_dates <= migration_dates$autumn_end)
 
 #FIXME: 
@@ -473,10 +471,9 @@ Est3MigrationDates = function(dat){
     #                 AND          Aug 1-Dec 30 for Fall migration end 
    # CHANGED FROM PREVIOUS CODE FOR HUMMINGBIRD PROJECT
    # ALSO ADDED NA.RM=TRUE ARGUMENT, DOES THIS HAVE ANY DOWNSIDES?
-   spring_threshold = min(filter(dat_subset, DAY %in% c(1:151))$lat_se*2.56 + filter(dat_subset, DAY %in% c(1:151))$lat)
-   fall_threshold = min(filter(dat_subset, DAY %in% c(213:364))$lat_se*2.56 + filter(dat_subset, DAY %in% c(213:364))$lat)
+   spring_threshold = min(filter(dat_subset, DAY %in% c(1:151))$lat_se*2.56 + filter(dat_subset, DAY %in% c(1:151))$lat, na.rm=TRUE)
+   fall_threshold = min(filter(dat_subset, DAY %in% c(213:364))$lat_se*2.56 + filter(dat_subset, DAY %in% c(213:364))$lat, na.rm=TRUE)
     #FIXME: after removing DAY=1, there are years with 364 days and with 365 days.If we ignore the last day of the leap years, will this influence fall threshold?
-    #FIXME: An issue is also occurring due to all the NA values, I think. Find a slightly different way to index through values?
     spring_index = intersect(c(11:190), dat_subset$DAY) # between 11 Jan and 9 July #FIXME: what should these dates be, they don't match
     fall_index = intersect(c(220:355), dat_subset$DAY) # between 8 August and 21 Dec
     spring_max = (dat_subset %>% filter(DAY %in% spring_index) %>% slice_max(lat))$DAY
@@ -488,7 +485,6 @@ Est3MigrationDates = function(dat){
     while(tst > spring_threshold){
       if(nrow(filter(dat_subset, DAY==spring_index2))>0) {
         tst = filter(dat_subset, DAY %in% spring_index2)$lat
-      #tst = dat_subset$lat[spring_index2]
         if(spring_index2 == 1) break
         spring_index2 = spring_index2 - 1
       }
@@ -502,7 +498,6 @@ Est3MigrationDates = function(dat){
     while(tst > fall_threshold){
       if(nrow(filter(dat_subset, DAY==fall_index2))>0) {
         tst = filter(dat_subset, DAY %in% fall_index2)$lat
-      #tst = dat_subset$lat[spring_index2]
         if(fall_index2 == 1) break
         fall_index2 = fall_index2 + 1
       }
@@ -536,32 +531,33 @@ spring <- ggplot(dates, aes(YEAR, SPRING)) +
   geom_point() + 
   geom_smooth(method="lm") +
  # geom_hline(yintercept = end_winter, linetype="dashed", col="hotpink") +
-  theme_bw() + xlab("Year") + ylab("spring begin migration date") + 
-  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  theme_bw() + xlab("Year") + ylab("spring begin date") + 
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
   #annotate(geom="text", x= 2012, y= 55, label=paste0("median doy = ", round(end_winter,2)))
-  facet_wrap(~species)
+  facet_wrap(~species, nrow=1)
 
 peak <- ggplot(dates, aes(YEAR, MAXLAT)) + 
   geom_point() + 
   geom_smooth(method="lm") +
  # geom_hline(yintercept = end_winter, linetype="dashed", col="hotpink") +
-  theme_bw() + xlab("Year") + ylab("peak latitude (breeding) date") + 
-  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  theme_bw() + xlab("Year") + ylab("peak latitude date") + 
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
   #annotate(geom="text", x= 2012, y= 55, label=paste0("median doy = ", round(end_winter,2)))
-  facet_wrap(~species)
+  facet_wrap(~species, nrow=1)
 
 fall <- ggplot(dates, aes(YEAR, FALL)) + 
   geom_point() + 
   geom_smooth(method="lm") +
   #geom_hline(yintercept = begin_winter, linetype="dashed", col="hotpink") +
-  theme_bw() + xlab("Year") + ylab("fall end migration date") + 
-  theme(text = element_text(size=14), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  theme_bw() + xlab("Year") + ylab("fall end date") + 
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
  # annotate(geom="text", x= 2012, y= 340, label=paste0("median doy = ", round(begin_winter,2)))
-  facet_wrap(~species)
+  facet_wrap(~species, nrow = 1)
 
 
 ggarrange(spring, peak, fall,
-          labels=c("A", "B", "C"))
+          labels=c("A", "B", "C"),
+          ncol=1)
 
 ggsave(filename = "figures/allspp_migrationDates.png", height = 11, width=8)
 ```
