@@ -339,37 +339,37 @@ ggplot(dailylocs, aes(lon, lat, group=YEAR)) +
 ```
 
 
-## Find the distances traveled between the mean locations. 
+## Find the distances traveled between the mean locations, add NA values for all missing days of the year. 
 This calculation uses Great Circle (ellipsoid) distance on the estimated daily locations from the GAM model predictions for latitude and longitude. Because of the way the distVicentyEllipsoid function works on the values, the rows *must* all be in chronological order.
 ```{r}
 #FIXME: THESE DISTANCES ARE MUCH TOO LARGE. SOMETHING MUST HAVE GONE WRONG WHEN I ADDED THE OTHER SPECIES.
+# TODO: THE CODE WORKS, BUT IT CALCULATES THE WRONG VALUES BECAUSE SOMETIMES THERE ARE NOT DISTANCES BETWEEN DAYS, BUT BETWEEN LONGER PERIODS OF TIME.
+#identify dates with no location and assign all values to NA
+missdates <- dailylocs %>%
+  group_by(species, YEAR) %>%
+  #technically this leaves out DAY 366 in 2008, 2012, 2016, and 2020, but I don't think that matters?
+  summarize(missing = setdiff(1:365, DAY)) %>% 
+  mutate(DAY = missing, MONTH=NA, lon=NA, lat=NA, lon_se=NA, lat_se=NA) %>%
+  select(species, DAY, YEAR, MONTH, lon, lat, lon_se, lat_se)
+
+#append the missing/NA date values to the main dailylocs dataframe
+dailylocs <- bind_rows(dailylocs, missdates)
 
 #calculate sequential distances using geosphere::distVicentyEllipsoid, adds NA for the first record
 calc_distances <- function(lon, lat) {
   m <- cbind(lon,lat)
   dist <- append(NA, distVincentyEllipsoid(m))/1000
-  return(dist)
+return(dist)
 }
 
 dailylocs <- dailylocs %>%
   # ensures that everything is ordered chronologically by year and day of year
   arrange(species, YEAR, DAY) %>%
-  group_by(species) %>%
+  group_by(species, YEAR) %>%
   #calculate sequential distances, adds NA for the first record
   mutate(distance = calc_distances(lon, lat)) %>%
   #Remove Day 1 for all year, because due to our method of separating GAM by year, it will be a flawed value
   filter(DAY != 1)
-  
-# # ensures that everything is ordered chronologically by year and day of year
-# dailylocs <- dailylocs %>%
-#   arrange(YEAR,DAY)
-# 
-# # add column to original dataset
-# dailylocs$distance <- distances
-# 
-# #Remove Day 1 for all year, because we know, due to our method of separating GAM by year, it will be a flawed value
-# dailylocs <- dailylocs %>%
-#   filter(DAY != 1)
 
 #TODO: If placed after the dates are calculated, then the speeds used can be limited to the migration seasons using the filter below. Not sure we need to do that here, but I think this is how I got around the year-to-year day 1 being wrong things last time, plus, that project was really only focused on th e migration seasons alone.
 #  filter(DAY >= migration_dates$spring_begin & migration_dates <= migration_dates$autumn_end)
@@ -377,7 +377,7 @@ dailylocs <- dailylocs %>%
 #FIXME: 
 ggplot(dailylocs, aes(as.numeric(DAY), distance, group=YEAR)) + geom_line(aes(col=species)) + 
   theme_bw() + xlab("Julian Day") + ylab("Distance Traveled (km)") + 
-  theme(text = element_text(size=20)) + 
+  theme(text = element_text(size=12)) + 
   facet_wrap(~species)#+  
   #geom_vline(xintercept = median(migr_dates), col = "indianred", linetype = "dashed")
 ```
@@ -443,8 +443,6 @@ ggplot(max_speed, aes(as.factor(YEAR), MAX_SPEED)) + geom_point() +
 
 # estimate 3 migration dates, beginning of spring, peak latitude (summer), end of fall migration
 This will need some editing to work on each year separately. Ideally a resulting data frame with columns for year, begin_spring, peak_latitude, end_autumn
-
-Ask Dr. Supp if you have questions :)
 ```{r}
 # TODO: from old function Est3MigrationDates in migration-fxns.R
 
