@@ -188,6 +188,7 @@ ggplot(weighted_mean_locs, aes(as.numeric(DAY), wtmean_lat, group=YEAR)) +
 ## Calculates the count of observations within each cell, 
 weighted by total eBirder effort on that day in a given cell. 
 Appends into the dataframe as "count_weighted" for analysis. Weighted as the total number of observations of the target species in a cell divided by the total number of eBirder records in a cell.
+
 ```{r}
 dgg <- dgconstruct(project = "FULLER", aperture = 4, topology = "HEXAGON", res = 6)
 dat_effort$cell <- dgGEO_to_SEQNUM(dgg, dat_effort$lon, dat_effort$lat)$seqnum
@@ -286,6 +287,8 @@ p <- ggplot() +
         axis.ticks.y=element_blank()) + 
   facet_wrap(~species)
 p
+
+ggsave(p, filename = here("figures/allspp_loc_frequency.png"), height=4, width=6)
 ```
 
 
@@ -372,7 +375,9 @@ dailylocs <- dailylocs %>%
 #TODO: If placed after the dates are calculated, then the speeds used can be limited to the migration seasons using the filter below. Not sure we need to do that here, but I think this is how I got around the year-to-year day 1 being wrong things last time, plus, that project was really only focused on the migration seasons alone.
 #  filter(DAY >= migration_dates$spring_begin & migration_dates <= migration_dates$autumn_end)
 
-#FIXME: 
+#save file with daily centroids and NA dates
+write_csv(dailylocs, file=here("data/intermed_data/allspp_daily_locs.csv"))
+
 ggplot(dailylocs, aes(as.numeric(DAY), distance, group=YEAR)) + geom_line(aes(col=species)) + 
   theme_bw() + xlab("Julian Day") + ylab("Distance Traveled (km)") + 
   theme(text = element_text(size=12)) + 
@@ -421,6 +426,9 @@ speeds <- max_speed %>%
     median = median(MAX_SPEED)
   )
 
+#save file with speeds for each species and year
+write_csv(max_speed, file=here("data/intermed_data/allspp_migspeeds.csv"))
+
 #plot the results estimating yearly maximum migration speed (km/day)
 ggplot(max_speed, aes(YEAR, MAX_SPEED)) + geom_line(aes(col=species)) + 
   theme_bw() + xlab("Year") + ylab("Max Speed (km/day)") + 
@@ -430,11 +438,11 @@ ggplot(max_speed, aes(YEAR, MAX_SPEED)) + geom_line(aes(col=species)) +
 ggplot(max_speed, aes(as.factor(YEAR), MAX_SPEED)) + geom_point() +
   #geom_hline(yintercept = med, linetype="dashed", col="hotpink") +
   theme_bw() + xlab("Year") + ylab("Max Speed (km/day)") + 
-  theme(text = element_text(size=20), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
+  theme(text = element_text(size=12), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
  # annotate(geom="text", x= 3, y= 50, label=paste0("median = ", round(med,2), " km/day")) + 
   facet_wrap(~species)
 
-#ggsave(filename = "figs/WOTH_MedMaxMigrationSpeed.png")
+ggsave(filename = here("figures/allspp_MedMaxMigrationSpeed.png"), height=4, width=6)
 ```
 
 
@@ -525,6 +533,9 @@ median_migdates <- dates %>%
             peak_lat = median(MAXLAT),
             end_fall = median(FALL))
 
+#save file with median migration dates
+write_csv(median_migdates, file=here("data/intermed_data/allspp_median_dates.csv"))
+
 # paste0("The beginning of winter is on average day ", begin_winter, " and the end of winter is on average day ", end_winter, ".")
 
 spring <- ggplot(dates, aes(YEAR, SPRING)) + 
@@ -559,7 +570,7 @@ ggarrange(spring, peak, fall,
           labels=c("A", "B", "C"),
           ncol=1)
 
-ggsave(filename = "figures/allspp_migrationDates.png", height = 11, width=8)
+ggsave(filename = here("figures/allspp_migrationDates.png"), height = 8, width=8)
 ```
 
 Interestingly, a few species in the images above seem to be arriving at the winter grounds later every year (S. rufus), while maintaining similar spring and peak lat dates. Others (S. platycercus, S. calliope A. colubris) may be reaching winter grounds slightly earlier in the year (or is this small enough effect to be sampling artefact?).  
