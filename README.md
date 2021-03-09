@@ -2,7 +2,7 @@
 Repository containing data and code for hummingbird migration project using eBird and environmental data
 
 ## Code Authors
-Sarah R. Supp (supps@denison.edu), Laura Graham (), and Frank LaSorte ()
+Sarah R. Supp (supps@denison.edu), Laura Graham (l.graham@bham.ac.uk), and Frank LaSorte ()
 
 ## Collaborators
 Sarah R. Supp, Laura Graham, Frank LaSorte, Catherine Graham... 
