@@ -193,6 +193,17 @@ ggplot(weighted_mean_locs, aes(as.numeric(DAY), wtmean_lat, group=YEAR)) +
   xlab("Day of the year") + 
   scale_x_continuous(breaks = seq(1, 366, by = 60)) +
   facet_wrap(~species)
+
+#visualize if the max latitude changes among years
+weighted_mean_locs %>%
+  group_by(species, YEAR) %>%
+  summarize(max_lat = max(wtmean_lat)) %>%
+  ggplot(aes(YEAR, max_lat)) + 
+  geom_point(aes(col=species)) + 
+  stat_smooth(method="lm") + 
+  facet_wrap(~species)
+
+
 ```
 
 
@@ -586,13 +597,87 @@ ggsave(filename = here("figures/allspp_migrationDates.png"), height = 8, width=8
 
 Interestingly, a few species in the images above seem to be arriving at the winter grounds later every year (S. rufus), while maintaining similar spring and peak lat dates. Others (S. platycercus, S. calliope A. colubris) may be reaching winter grounds slightly earlier in the year (or is this small enough effect to be sampling artefact?).  
 Other species may be experiencing some changes to spring, where (A. archilochus is staying longer in its winter grounds (delayed spring migration) and S. calliope and S. platycercus may be adcancing their spring migration to leave slightly earlier each year.
-Peak latitude (popualation is no longer moving strongly northwards) appears to be fairly flat for most species across the time series. 
+Peak latitude (population is no longer moving strongly northwards) appears to be fairly flat for most species across the time series. 
 
 ```{r}
 dat_effort %>%
  filter(species == "Selasphorus rufus") %>%
  filter(DAY > 333 | DAY < 28) %>%
  ggplot(aes(lon, lat)) + geom_point(alpha=0.1, aes(col=YEAR)) + facet_wrap(~YEAR)
+```
+
+
+## plot where species are located, pooled across the winters
+Use the dates for each year separately, as they do seem to shift, to indicate "winter", and then pool locations in the dat_effort file to focus only on winter.
+```{r}
+species=unique(dat_effort$species)
+years = c(2008:2019)
+
+#make empty dataframe for winter locations
+winterlocs <- data.frame(matrix(ncol = 12, nrow = 0))
+colnames(winterlocs) <- names(dat_effort)
+
+#run for all species and years separately
+for (s in species) {
+  for (y in years) {
+    print(s)
+    print(y)
+    dat <- dat_effort %>% filter(YEAR==y & species==s)
+    winter <- dates %>% filter(YEAR==y & species==s)
+    winter_range <- c(winter$SPRING, winter$FALL)
+    winter_dat <- dat %>% filter(DAY < winter_range[1] | DAY > winter_range[2])
+    winterlocs <- rbind(winterlocs, winter_dat)
+  }
+}
+
+#plot the winter locations
+#Get polygons for the spatial range and make a map of bird observations
+
+mapa <- borders("world", regions = c("Panama", "Costa Rica", "Nicaragua", "Honduras", "El Salvador", "Belize", "Guatemala", "Mexico", "Trinidad and Tobago","Caribe", "Puerto Rico", "Dominican Republic", "Haiti", "Jamaica", "Cuba", "Bahamas", "Antiles", "Dominica", "Saba"), fill = "grey90", colour = "black")
+
+ggplot() + mapa + 
+  theme_bw() + xlab("Longitude") + ylab("Latitude") + 
+  theme(panel.border = element_blank(), panel.grid.major = element_line(colour = "grey50"), panel.grid.minor = element_blank()) + 
+  geom_point(data=winterlocs, aes(lon, lat, col=DAY, alpha=count_weighted), size=0.25) + 
+  facet_wrap(~species) + ggtitle("Nonbreeding")
+
+```
+
+## plot where species are located, pooled across the breeding seasons, within 3 days on either side of "peak latitude".
+They shouldn't be moving very much right around this date, so perhaps it would minimize picking up on migrating/en route individuals and represent the breeding ground decently well?
+Use the dates for each year separately, as they do seem to shift, to indicate "breeding", and then pool locations in the dat_effort file to focus only on breeding
+```{r}
+species=unique(dat_effort$species)
+years = c(2008:2019)
+
+#make empty dataframe for winter locations
+breedlocs <- data.frame(matrix(ncol = 12, nrow = 0))
+colnames(breedlocs) <- names(dat_effort)
+
+#run for all species and years separately
+for (s in species) {
+  for (y in years) {
+    print(s)
+    print(y)
+    dat <- dat_effort %>% filter(YEAR==y & species==s)
+    breed <- dates %>% filter(YEAR==y & species==s)
+    breed_range <- c(breed$MAXLAT - 3, breed$MAXLAT + 3)
+    breed_dat <- dat %>% filter(DAY >= breed_range[1] & DAY <= breed_range[2])
+    breedlocs <- rbind(breedlocs, breed_dat)
+  }
+}
+
+#plot the breeding locations
+#Get polygons for the spatial range and make a map of bird observations
+
+map <- borders("usa")#, regions = c("United States"), fill = "grey90", colour = "black")
+
+ggplot() + map + 
+  theme_bw() + xlab("Longitude") + ylab("Latitude") + 
+  theme(panel.border = element_blank(), panel.grid.major = element_line(colour = "grey50"), panel.grid.minor = element_blank()) + 
+  geom_point(data=breedlocs, aes(lon, lat, col=DAY, alpha=count_weighted), size=0.05) + 
+  facet_wrap(~species) + ggtitle("Breeding")
+
 ```
 
 
