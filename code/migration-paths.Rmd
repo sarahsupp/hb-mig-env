@@ -680,4 +680,41 @@ ggplot() + map +
 
 ```
 
+# quick plot of El Nino / La Nina years in the data
+```{r}
+#modified from https://www.r-bloggers.com/2013/01/el-nino-and-ggplot2/
+require(ggplot2)
+  noaa.df = read.fwf(file = url("http://www.cpc.ncep.noaa.gov/data/indices/wksst8110.for"),
+    skip = 4, widths = c(12, 7,4, 9,4, 9,4, 9,4))
+  
+  clabels = c('Data','SST_Nino12','SSTA_Nino12','SST_Nino3','SSTA_Nino3',
+                    'SST_Nino34','SSTA_Nino34','SST_Nino4', 'SSTA_Nino4')
+  
+  temp.title = 'SSTA Anomaly Trend\nWeekly Data centered on Wed'
+  colnames(noaa.df) = clabels
+ 
+  index = 'SSTA_Nino34'
+  plot.title = switch(index, 
+                      'SSTA_Nino12' = paste('NINO 1.2', temp.title),
+                      'SSTA_Nino3' = paste('NINO 3', temp.title),
+                      'SSTA_Nino34' = paste('NINO 3.4', temp.title),
+                      'SSTA_Nino4' = paste('NINO 4', temp.title))
+  
+  serie.dates = seq(as.Date('1990-01-03'), by = 'week', length = nrow(noaa.df))
+  
+  nino.rows = noaa.df[, index] > 0
+  nino = noaa.df[nino.rows, index]
+  nina = noaa.df[! nino.rows, index]
+  
+  nino.df = data.frame(Date = serie.dates[nino.rows], nino)
+  nina.df = data.frame(Date = serie.dates[! nino.rows], nina)
+  
+  p = ggplot() +
+  geom_linerange(aes(x = Date, ymin = 0, ymax = nino), colour = I('indianred'), data = nino.df) +
+  geom_linerange(aes(x = Date, ymin = nina, ymax = 0), colour = I('cadetblue'), data = nina.df) +
+  labs(x = '', y = expression(paste("SST Anomaly [", degree, "C]", sep = "")), title = plot.title) + 
+  theme(plot.title = element_text(face = "bold", size = 15)) + 
+    xlim(as.Date("2008-01-01"), as.Date("2019-12-31"))
+  p
+```
 
