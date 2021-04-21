@@ -130,10 +130,20 @@ weighted_mean_locs <- weighted_mean_locs %>%
 Count number of records by year.
 Look for any potentially problematic trends in strong increases in number of obs, number of cells, and should be relatively flat across the number of days per year observed. 
 ```{r}
-#count total number of records across the years. (increasing strongly)
+#count total number of records across the years, binned by spatial polygon. (increasing strongly)
 counts <- dat_effort %>%
   group_by(species, YEAR) %>%
   tally()
+
+#counts total number of occurrences, divided by total number of efforts (count.x/count.y)
+counts2 <- dat_effort %>%
+  group_by(species, YEAR) %>%
+  summarize(weighted_total=sum(count.x)/sum(count.y)) 
+
+num_occurrences <- ggplot(counts2, aes(YEAR, weighted_total))  + geom_bar(stat="identity") + 
+  theme_bw() + ylab("total occurrences by effort") + xlab("Year") +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  facet_wrap(~species, ncol=1)
 
 num_bins <- ggplot(counts, aes(YEAR, n)) + geom_bar(stat="identity") + 
   theme_bw() + ylab("Number of binned observations") + xlab("Year") +
